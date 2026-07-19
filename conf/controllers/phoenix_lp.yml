@@ -1,0 +1,57 @@
+# Phoenix LP — $10 micro-bankroll CLMM market maker for Solana
+# Deploy: start --script v2_with_controllers.py --conf v2_phoenix_lp.yml
+#
+# REQUIRED before launch: set trading_pair + pool_address to your chosen pool.
+# Pick per the research (research/esoteric_strategies.md): long-tail token, pool fee
+# >= 0.25% (Meteora dynamic-fee pools ideal), real volume, NO pump.fun mints (the bot
+# re-checks the mint on-chain and vetoes itself if the CA ends with "pump").
+id: phoenix_lp_1
+controller_name: phoenix_lp
+controller_type: generic
+connector_name: solana-mainnet-beta
+lp_provider: meteora/clmm
+trading_pair: TOKEN-USDC              # <-- set me
+pool_address: "REPLACE_WITH_POOL_ADDRESS"  # <-- set me
+
+# Venue guards
+banned_ca_suffixes: "pump"            # veto pump.fun launches by mint suffix
+min_pool_fee_pct: 0.25                # refuse pools whose fee tier can't beat adverse selection
+
+# Bankroll (fractional-Kelly compounding, hard floor)
+total_amount_quote: 10
+kelly_fraction: 0.4                   # deploy 40% of live equity; reserve the rest
+max_compound_factor: 5
+ashes_floor_pct: 0.6                  # permanent halt below $6 equity
+
+# Band geometry (Avellaneda-Stoikov -> CLMM)
+as_gamma: 0.8
+as_kappa: 150                         # base half-spread ~ 1/kappa (~0.7%)
+as_horizon_seconds: 3600
+min_width_pct: 0.4
+max_width_pct: 8
+trend_lean: 0.5
+
+# Asymmetric tau-reset (the verified anti-IL mechanism)
+upper_rebalance_pct: 0.5              # re-anchor fast when price exits upward
+protective_zone_pct: 8                # dumps within 8% below the band do NOT trigger relocation
+min_rebalance_interval: 300           # never rebalance more than once per 5 min
+flip_hysteresis: 0.1
+
+# Signals
+sample_interval: 5
+vol_window: 240
+ema_fast: 20
+ema_slow: 80
+rsi_length: 14
+min_samples: 60
+
+# Hawkes cascade detector
+hawkes_event_pct: 0.3                 # a >=0.3% down-move per sample is one sell event
+hawkes_window: 900
+hawkes_decay_seconds: 30
+hawkes_min_events: 6
+panic_branching_ratio: 0.7            # pull quotes when sell flow becomes self-exciting
+resume_branching_ratio: 0.4
+
+# Meteora DLMM strategy type (0 = Spot). Remove for Orca/Raydium.
+strategy_type: 0
