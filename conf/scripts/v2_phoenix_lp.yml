@@ -1,0 +1,6 @@
+# Runner config for Phoenix LP (Solana CLMM)
+# Deploy: start --script v2_with_controllers.py --conf v2_phoenix_lp.yml
+script_file_name: v2_with_controllers.py
+controllers_config:
+- phoenix_lp.yml
+max_global_drawdown_quote: 4    # hard kill-switch below the controller's own ashes floor
