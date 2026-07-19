@@ -1,0 +1,6 @@
+# Runner config for the Phoenix micro market maker
+# Deploy: start --script v2_with_controllers.py --conf v2_phoenix.yml
+script_file_name: v2_with_controllers.py
+controllers_config:
+- phoenix_micro.yml
+max_global_drawdown_quote: 4    # hard kill-switch: stop everything if $4 of the $10 is lost

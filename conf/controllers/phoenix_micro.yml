@@ -1,0 +1,37 @@
+# Phoenix — $10 micro market maker preset
+# Deploy: start --script v2_with_controllers.py --conf v2_phoenix.yml
+id: phoenix_micro
+controller_name: pmm_phoenix
+controller_type: market_making
+connector_name: binance_perpetual
+trading_pair: DOGE-USDT
+total_amount_quote: 10          # the whole bankroll — sizing compounds off this + realized PnL
+# One quote per side: $10 split across levels must clear the $5 exchange minimum notional
+buy_spreads: "1.0"              # in NATR units (dynamic); floored at round-trip fees + margin
+sell_spreads: "1.0"
+buy_amounts_pct:
+sell_amounts_pct:
+executor_refresh_time: 45       # requote unfilled orders every 45s
+cooldown_time: 60               # pause a level 60s after a stop-loss
+leverage: 5                     # $10 margin ≈ $50 buying power; bot quotes ~$10-15 notional
+position_mode: HEDGE
+stop_loss: 0.006                # baseline; scaled with live volatility at order time
+take_profit: 0.005              # baseline; replaced by max(NATR, fee floor) at order time
+time_limit: 1800                # flatten stale positions after 30 min
+take_profit_order_type: LIMIT
+trailing_stop:
+candles_connector: binance_perpetual
+candles_trading_pair: DOGE-USDT
+interval: 1m
+natr_length: 30
+ema_fast: 8
+ema_slow: 34
+rsi_length: 14
+maker_fee_pct: 0.0002           # Binance USDT-perp maker fee (2 bps); set to your tier
+min_profit_pct: 0.0004          # never quote a spread that nets less than 4 bps round-trip
+trend_lean: 0.5                 # shift reference price up to 0.5 NATR toward the trend
+trend_spread_skew: 0.3          # tighten the with-trend quote by up to 30%
+trend_size_skew: 0.4            # up-size the with-trend quote by up to 40%
+panic_natr_mult: 3              # pull all quotes when NATR > 3x its recent median
+ashes_floor_pct: 0.6            # stop quoting for good if equity drops below $6
+max_compound_factor: 5          # cap order growth at 5x the starting size
