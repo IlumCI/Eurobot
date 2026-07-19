@@ -1,6 +1,21 @@
+import { useEffect, useState } from 'react';
+
 import CountUp from './reactbits/CountUp.jsx';
 import DecryptedText from './reactbits/DecryptedText.jsx';
 import SplitText from './reactbits/SplitText.jsx';
+
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    const stored = localStorage.getItem('es-theme');
+    if (stored === 'light' || stored === 'dark') return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('es-theme', theme);
+  }, [theme]);
+  return [theme, setTheme];
+}
 
 const MECHANISMS = [
   {
@@ -85,6 +100,7 @@ function RuleLabel({ num, children }) {
 }
 
 export default function App() {
+  const [theme, setTheme] = useTheme();
   return (
     <div className="doc">
       {/* ---- masthead ---- */}
@@ -102,6 +118,15 @@ export default function App() {
         </nav>
         <div className="masthead-right">
           <span className="doc-meta">DOC. ES-001 / REV A</span>
+          <button
+            className="mode-toggle"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            aria-label="Toggle color theme"
+          >
+            <span className={theme === 'light' ? 'active' : ''}>PRINT</span>
+            {' / '}
+            <span className={theme === 'dark' ? 'active' : ''}>TERM</span>
+          </button>
         </div>
       </header>
 

@@ -12,8 +12,25 @@
   --ink-35: rgba(23, 21, 15, 0.35);
   --hairline: rgba(23, 21, 15, 0.18);
   --signal: #e8490f;
-  --terminal: #131511;
-  --terminal-ink: #d8e0cf;
+  /* telemetry panel: the one INVERTED object on the page */
+  --panel-bg: #131511;
+  --panel-ink: #d8e0cf;
+  --panel-line: rgba(216, 224, 207, 0.2);
+  --panel-dim: rgba(216, 224, 207, 0.55);
+}
+
+:root[data-theme='dark'] {
+  --paper: #121310;
+  --paper-2: #1b1d18;
+  --ink: #e6e1d4;
+  --ink-60: rgba(230, 225, 212, 0.62);
+  --ink-35: rgba(230, 225, 212, 0.35);
+  --hairline: rgba(230, 225, 212, 0.16);
+  --signal: #ff5a1f;
+  --panel-bg: #f4f1ea;
+  --panel-ink: #17150f;
+  --panel-line: rgba(23, 21, 15, 0.18);
+  --panel-dim: rgba(23, 21, 15, 0.55);
 }
 
 * {
@@ -210,8 +227,8 @@ a {
 
 /* ---- telemetry (the one dark object) ---- */
 .telemetry {
-  background: var(--terminal);
-  color: var(--terminal-ink);
+  background: var(--panel-bg);
+  color: var(--panel-ink);
   border: 1px solid var(--ink);
   box-shadow: 6px 6px 0 var(--ink-35);
 }
@@ -223,8 +240,8 @@ a {
   font-size: 0.68rem;
   letter-spacing: 0.14em;
   padding: 0.6rem 0.9rem;
-  border-bottom: 1px solid rgba(216, 224, 207, 0.2);
-  color: rgba(216, 224, 207, 0.75);
+  border-bottom: 1px solid var(--panel-line);
+  color: var(--panel-dim);
 }
 
 .blink {
@@ -250,9 +267,32 @@ a {
 .telemetry-foot {
   font-size: 0.6rem;
   letter-spacing: 0.12em;
-  color: rgba(216, 224, 207, 0.45);
+  color: var(--panel-dim);
   padding: 0.55rem 0.9rem;
-  border-top: 1px solid rgba(216, 224, 207, 0.2);
+  border-top: 1px solid var(--panel-line);
+}
+
+/* ---- theme toggle ---- */
+.mode-toggle {
+  background: none;
+  border: 1px solid var(--hairline);
+  color: var(--ink-60);
+  font-family: inherit;
+  font-size: 0.65rem;
+  letter-spacing: 0.16em;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+  margin-left: 1.2rem;
+}
+
+.mode-toggle:hover {
+  color: var(--ink);
+  border-color: var(--signal);
+}
+
+.mode-toggle .active {
+  color: var(--signal);
+  font-weight: 600;
 }
 
 /* ---- section blocks ---- */
