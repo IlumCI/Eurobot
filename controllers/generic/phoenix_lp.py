@@ -12,6 +12,7 @@ from hummingbot.strategy_v2.controllers import ControllerBase, ControllerConfigB
 from hummingbot.strategy_v2.executors.data_types import ConnectorPair
 from hummingbot.strategy_v2.executors.gateway_utils import parse_provider
 from hummingbot.strategy_v2.executors.lp_executor.data_types import LPExecutorConfig
+from hummingbot.strategy_v2.executors.order_executor.data_types import ExecutionStrategy, OrderExecutorConfig
 from hummingbot.strategy_v2.models.base import RunnableStatus
 from hummingbot.strategy_v2.models.executor_actions import CreateExecutorAction, ExecutorAction, StopExecutorAction
 from hummingbot.strategy_v2.models.executors import CloseType
@@ -94,11 +95,14 @@ class PhoenixLPConfig(ControllerConfigBase):
         description="Down-move (%) between samples that counts as one sell-pressure event")
     hawkes_window: int = Field(default=900, description="Seconds of events kept for the Hawkes fit")
     hawkes_decay_seconds: Decimal = Field(default=Decimal("30"), description="Exponential kernel decay timescale")
-    hawkes_min_events: int = Field(default=6)
+    hawkes_min_events: int = Field(default=5)
     panic_branching_ratio: Decimal = Field(
         default=Decimal("0.7"), json_schema_extra={"is_updatable": True},
         description="Branching ratio above which quotes are pulled (sell flow feeding on itself)")
     resume_branching_ratio: Decimal = Field(default=Decimal("0.4"))
+    panic_flatten: bool = Field(
+        default=True,
+        description="On PERCHED/ASHES, market-sell held base via the swap provider: exit the token, not just the position")
 
     # Connector-specific (e.g. Meteora strategyType)
     strategy_type: Optional[int] = Field(default=None)
@@ -167,7 +171,10 @@ class PhoenixLP(ControllerBase):
 
         # Executor tracking + realized position hold (net token change across closed positions)
         self._current_executor_id: Optional[str] = None
+        self._stop_requested_id: Optional[str] = None
+        self._flatten_executor_id: Optional[str] = None
         self._last_close_ts: float = 0.0
+        self._sigma_robust: float = 0.0  # MAD-based sigma; cascades can't inflate it
         self._hold_base: Decimal = Decimal("0")
         self._hold_quote: Decimal = Decimal("0")
         self._quoting_side: TradeType = TradeType.BUY  # start bid-side: bankroll begins in quote
@@ -199,8 +206,15 @@ class PhoenixLP(ControllerBase):
             self._samples.append((now, float(pool_info.price)))
             if prev and prev > 0:
                 move = float(pool_info.price) / prev - 1.0
-                if move <= -float(self.config.hawkes_event_pct) / 100.0:
-                    self._events.append(now)
+                # Adaptive event threshold: 3x robust (MAD) sigma so ordinary chop never
+                # emits events, while a cascade cannot inflate its own detection bar
+                threshold = max(float(self.config.hawkes_event_pct) / 100.0, 3.0 * self._sigma_robust)
+                if move <= -threshold:
+                    # Marked events: a k-threshold move counts k times (capped). Without this a
+                    # violent cascade saturates to one event per sample — a REGULAR stream the
+                    # EM rightly reads as background rate, not self-excitation.
+                    for k in range(min(int(-move / threshold), 10)):
+                        self._events.append(now + 0.05 * k)
             self._recompute_signals(now)
 
         self.processed_data = {
@@ -230,12 +244,26 @@ class PhoenixLP(ControllerBase):
             rets = [math.log(prices[i] / prices[i - 1]) for i in range(1, len(prices)) if prices[i - 1] > 0]
             mean = sum(rets) / len(rets)
             self._sigma_sample = math.sqrt(sum((r - mean) ** 2 for r in rets) / max(len(rets) - 1, 1))
+            srt = sorted(rets)
+            med = srt[len(srt) // 2]
+            mad = sorted(abs(r - med) for r in rets)[len(rets) // 2]
+            self._sigma_robust = 1.4826 * mad
         if len(prices) >= self.config.min_samples:
             self._trend = self._trend_score(prices)
         cutoff = now - self.config.hawkes_window
         while self._events and self._events[0] < cutoff:
             self._events.popleft()
-        self._branching_ratio = self._hawkes_branching_ratio(list(self._events), now)
+        # Composite cascade score. The EM branching ratio reads clustering PATTERN — it
+        # catches slow-building cascades and stays elevated after a storm (blocking
+        # re-entry) — but a live constant-intensity storm is correctly explained by
+        # background rate, so it goes blind mid-rug. The intensity term covers that:
+        # under the 3-sigma adaptive threshold the chop baseline is ~zero events, so a
+        # burst of marked events inside two decay windows IS the cascade, live.
+        em_n = self._hawkes_branching_ratio(list(self._events), now)
+        recent_window = 2.0 * float(self.config.hawkes_decay_seconds)
+        recent = sum(1 for t in self._events if t > now - recent_window)
+        intensity = min(recent / (2.0 * self.config.hawkes_min_events), 0.95)
+        self._branching_ratio = max(em_n, intensity)
 
     def _trend_score(self, prices: List[float]) -> float:
         """EMA distance (vol-normalized) + RSI bias, clipped to [-1, 1]."""
@@ -319,17 +347,72 @@ class PhoenixLP(ControllerBase):
         self._current_executor_id = None
         self._last_close_ts = self.market_data_provider.time()
 
-    def _pick_side(self) -> TradeType:
-        """Quote the side our inventory funds: bid (quote-heavy) or ask (base-heavy), with hysteresis."""
+    def available_quote(self) -> Decimal:
+        """Quote actually spendable: bankroll plus net quote change from closed positions."""
+        return max(self.config.total_amount_quote + self._hold_quote, Decimal("0"))
+
+    def _settle_flatten_executor(self):
+        """Fold a completed panic-flatten swap into the position hold."""
+        if not self._flatten_executor_id:
+            return
+        if self._flatten_executor_id == "pending":
+            candidates = [e for e in self.executors_info
+                          if getattr(e.config, "type", None) == "order_executor"
+                          and getattr(e.config, "level_id", None) == "panic_flatten"]
+            if not candidates:
+                return
+            self._flatten_executor_id = candidates[-1].id
+        ex = next((e for e in self.executors_info if e.id == self._flatten_executor_id), None)
+        if ex is None or not ex.is_done:
+            return
+        if ex.close_type != CloseType.FAILED:
+            executed = Decimal(str(ex.custom_info.get("executed_amount_base", 0)))
+            px = Decimal(str(ex.custom_info.get("average_executed_price", 0)))
+            self._hold_base -= executed
+            self._hold_quote += executed * px
+            self.logger().info(
+                f"Panic flatten filled: sold {executed:.6f} {self._base_token} @ {px:.8f} | equity {self.equity():.4f}")
+        self._flatten_executor_id = None
+
+    def _panic_flatten_action(self) -> Optional[CreateExecutorAction]:
+        """Market-sell held base while panicked; only after the LP position is closed and settled."""
+        if not self.config.panic_flatten or self._flatten_executor_id is not None:
+            return None
+        if self._current_executor_id is not None or self._active_executor() is not None:
+            return None  # position tokens are not in the wallet until the LP close settles
         price = self._pool_price or Decimal("0")
-        base_value = self._hold_base * price
-        total = base_value + self._hold_quote + self.config.total_amount_quote
-        if total <= 0:
+        if price <= 0 or self._hold_base * price < Decimal("1"):
+            return None  # nothing worth a swap fee
+        order = OrderExecutorConfig(
+            timestamp=self.market_data_provider.time(),
+            connector_name=self.config.connector_name,
+            trading_pair=self.config.trading_pair,
+            side=TradeType.SELL,
+            amount=self._hold_base,
+            execution_strategy=ExecutionStrategy.MARKET,
+            price=price,
+            level_id="panic_flatten",
+        )
+        self._flatten_executor_id = "pending"
+        self.logger().warning(
+            f"Panic flatten: selling {self._hold_base:.6f} {self._base_token} to exit the token entirely.")
+        return CreateExecutorAction(controller_id=self.config.id, executor_config=order)
+
+    def _pick_side(self) -> TradeType:
+        """
+        Quote the side our inventory can fund: the ask (SELL band) once held base covers
+        at least half the next deployment, back to the bid (BUY band) once it cannot.
+        Hysteresis prevents side thrash at the boundary.
+        """
+        price = self._pool_price or Decimal("0")
+        deploy = self.deploy_amount_quote()
+        if deploy <= 0 or price <= 0:
             return self._quoting_side
-        base_frac = base_value / total
-        if self._quoting_side == TradeType.BUY and base_frac > Decimal("0.5") + self.config.flip_hysteresis:
+        base_value = self._hold_base * price
+        coverage = base_value / deploy
+        if self._quoting_side == TradeType.BUY and coverage > Decimal("0.5") + self.config.flip_hysteresis:
             self._quoting_side = TradeType.SELL
-        elif self._quoting_side == TradeType.SELL and base_frac < Decimal("0.5") - self.config.flip_hysteresis:
+        elif self._quoting_side == TradeType.SELL and coverage < Decimal("0.5") - self.config.flip_hysteresis:
             self._quoting_side = TradeType.BUY
         return self._quoting_side
 
@@ -379,10 +462,15 @@ class PhoenixLP(ControllerBase):
         lower, upper, lower_limit, upper_limit = self._band(side, price)
         if lower >= upper:
             return None
+        # Clamp to inventory the wallet can actually fund; the chain rejects unfunded adds
         if side == TradeType.BUY:
-            base_amt, quote_amt = Decimal("0"), deploy
+            base_amt, quote_amt = Decimal("0"), min(deploy, self.available_quote())
+            funded = quote_amt
         else:
-            base_amt, quote_amt = deploy / price, Decimal("0")
+            base_amt, quote_amt = min(deploy / price, max(self._hold_base, Decimal("0"))), Decimal("0")
+            funded = base_amt * price
+        if funded < Decimal("1"):  # below any CLMM min-deposit worth paying rent for
+            return None
         extra = {"strategyType": self.config.strategy_type} if self.config.strategy_type is not None else None
         self.logger().info(
             f"Phoenix band: {side.name} [{lower:.8f}, {upper:.8f}] limits [{lower_limit:.8f}, {upper_limit:.8f}] "
@@ -412,6 +500,7 @@ class PhoenixLP(ControllerBase):
             self._current_executor_id = active.id
         if not active:
             self._settle_closed_executor()
+        self._settle_flatten_executor()
 
         # State transitions
         if self.state not in ("VETOED", "ASHES"):
@@ -428,14 +517,19 @@ class PhoenixLP(ControllerBase):
             elif self.state in ("HATCHING", "FLYING"):
                 self.state = "HATCHING" if len(self._samples) < self.config.min_samples else "FLYING"
 
-        # Halt states and panic: pull any live position, create nothing
+        # Halt states and panic: pull any live position, dump held base, create nothing
         if self.state in ("VETOED", "ASHES", "PERCHED"):
-            if active:
+            if active and active.id != self._stop_requested_id:
+                self._stop_requested_id = active.id
                 actions.append(StopExecutorAction(controller_id=self.config.id, executor_id=active.id))
+            if self.state in ("ASHES", "PERCHED"):
+                flatten = self._panic_flatten_action()
+                if flatten:
+                    actions.append(flatten)
             return actions
 
         # FLYING: keep exactly one position, respecting the minimum rebalance interval
-        if self.state == "FLYING" and active is None:
+        if self.state == "FLYING" and active is None and self._flatten_executor_id is None:
             if now - self._last_close_ts >= self.config.min_rebalance_interval:
                 executor_config = self._create_executor_config()
                 if executor_config:

@@ -49,9 +49,10 @@ min_samples: 60
 hawkes_event_pct: 0.3                 # a >=0.3% down-move per sample is one sell event
 hawkes_window: 900
 hawkes_decay_seconds: 30
-hawkes_min_events: 6
+hawkes_min_events: 5
 panic_branching_ratio: 0.7            # pull quotes when sell flow becomes self-exciting
 resume_branching_ratio: 0.4
+panic_flatten: true                   # on panic, market-sell held base: exit the token, not just the position
 
 # Meteora DLMM strategy type (0 = Spot). Remove for Orca/Raydium.
 strategy_type: 0
