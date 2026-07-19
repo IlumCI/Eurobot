@@ -1,44 +1,49 @@
 import CountUp from './reactbits/CountUp.jsx';
 import DecryptedText from './reactbits/DecryptedText.jsx';
-import GradientText from './reactbits/GradientText.jsx';
-import Particles from './reactbits/Particles.jsx';
-import ShinyText from './reactbits/ShinyText.jsx';
 import SplitText from './reactbits/SplitText.jsx';
-import SpotlightCard from './reactbits/SpotlightCard.jsx';
-
-const EMBER = ['#ff6a00', '#ffb347', '#ff3c00'];
-const SWARM = ['#22d3ee', '#818cf8', '#22d3ee'];
 
 const MECHANISMS = [
   {
+    id: 'M-01',
     name: 'Venue guards',
+    kills: 'Adverse selection',
     detail:
-      'Refuses pools whose fee tier cannot beat adverse selection. Vetoes pump.fun mints on-chain. Shows the LVR breakeven race live.',
+      'Refuses pools whose fee tier cannot beat the σ²/8 arbitrage bleed. Vetoes pump.fun mints by their on-chain suffix. The LVR breakeven race is displayed live.',
   },
   {
+    id: 'M-02',
     name: 'Asymmetric bands',
+    kills: 'Impermanent loss',
     detail:
-      'A protective zone below the position so dumps never crystallize impermanent loss; a tight trip above to re-anchor fast. Hard minimum rebalance interval — over-trading is the documented killer.',
+      'A wide protective zone below the position — dumps never crystallize IL at the bottom of a wick. A tight trip above re-anchors fast. Hard minimum interval between rebalances.',
   },
   {
+    id: 'M-03',
     name: 'Avellaneda–Stoikov geometry',
+    kills: 'Naive placement',
     detail:
-      'The classic market-making optimum, ported to liquidity bins: inventory-skewed reservation price sets the band center, the optimal spread sets its width.',
+      'Inventory-skewed reservation price sets the band center; the optimal spread sets its width. One side quoted at a time, flipping with hysteresis as fills convert inventory.',
   },
   {
-    name: 'Cascade detection',
+    id: 'M-04',
+    name: 'Hawkes cascade detector',
+    kills: 'Rugs',
     detail:
-      'A Hawkes-process detector on the swap stream senses when sell flow starts feeding on itself — and pulls the position before volatility metrics react.',
+      'An exponential-kernel self-excitation fit on the swap stream. When sell flow starts feeding on itself, the pod knows before any volatility metric does.',
   },
   {
+    id: 'M-05',
     name: 'Panic flatten',
+    kills: 'Bag-holding',
     detail:
-      'When the alarm fires, the pod does not just close the position. It exits the token entirely, back to your stablecoin.',
+      'On alarm, the pod does not merely close the position — it exits the token entirely, back to your stablecoin, via the swap provider.',
   },
   {
+    id: 'M-06',
     name: 'Sub-Kelly compounding',
+    kills: 'Ruin',
     detail:
-      'Positions sized as a conservative fraction of live equity — wins compound the next quote, and a hard equity floor halts the machine for good if breached.',
+      'Deployment sized as a conservative fraction of live equity. Wins compound the next quote. A hard floor halts the machine permanently if breached.',
   },
 ];
 
@@ -49,7 +54,7 @@ const FAQS = [
   },
   {
     q: 'Can Euroswarms withdraw my funds?',
-    a: 'No, and not as a policy promise — as a construction. Your pod trades through a scoped delegation that can open and close positions on whitelisted programs only. Transfers to any other address are structurally impossible, and you can revoke the delegation in your wallet at any moment.',
+    a: 'No — and not as a policy promise, as a construction. The pod trades through a scoped delegation that can open and close positions on whitelisted programs only. Transfers to any other address are structurally impossible. You can revoke the delegation in your wallet at any moment.',
   },
   {
     q: 'What returns should I expect?',
@@ -57,252 +62,313 @@ const FAQS = [
   },
   {
     q: 'What do other users get from my pod?',
-    a: 'Intelligence, never money. Your pod contributes anonymized signals — cascade alarms, rug blacklist entries, pool crowding data — to the swarm, and receives the same from every other pod. Profits and losses stay strictly yours.',
+    a: 'Intelligence, never money. Your pod contributes anonymized signals — cascade alarms, blacklist entries, pool crowding data — to the swarm, and receives the same from every other pod. Profits and losses stay strictly yours.',
   },
   {
     q: 'How do I stop?',
-    a: 'Revoke the delegation in your wallet — the pod loses all authority instantly, no support ticket required. Cancel the subscription whenever you like.',
+    a: 'Revoke the delegation in your wallet: the pod loses all authority instantly, no support ticket required. Cancel the subscription whenever you like.',
   },
   {
     q: 'Is the strategy public?',
-    a: 'The research behind it is — the verified strategy catalog and the simulation harness are in the open repository. The pod runtime and swarm layer are proprietary.',
+    a: 'The research behind it is — the verified strategy catalog and the simulation harness live in the open repository. The pod runtime and the swarm layer are proprietary.',
   },
 ];
 
-function Section({ id, kicker, title, children }) {
+function RuleLabel({ num, children }) {
   return (
-    <section id={id} className="section">
-      <p className="kicker mono">{kicker}</p>
-      <h2 className="section-title">{title}</h2>
-      {children}
-    </section>
+    <div className="rule-label">
+      <span className="rule-num">§{num}</span>
+      <span className="rule-text">{children}</span>
+      <span className="rule-line" />
+    </div>
   );
 }
 
 export default function App() {
   return (
-    <div className="page">
-      <div className="particles-wrap">
-        <Particles
-          particleColors={['#ff6a00', '#22d3ee', '#ffffff']}
-          particleCount={220}
-          particleSpread={11}
-          speed={0.06}
-          particleBaseSize={90}
-          moveParticlesOnHover={false}
-          alphaParticles
-          disableRotation={false}
-        />
-      </div>
-
-      <nav className="nav">
-        <span className="logo mono">
-          EURO<span className="logo-accent">SWARMS</span>
-        </span>
-        <div className="nav-links">
-          <a href="#how">How it works</a>
-          <a href="#machine">The machine</a>
-          <a href="#swarm">The swarm</a>
+    <div className="doc">
+      {/* ---- masthead ---- */}
+      <header className="masthead">
+        <div className="masthead-left">
+          <span className="wordmark">EUROSWARMS</span>
+          <span className="doc-meta">AUTONOMOUS MARKET-MAKING PODS</span>
+        </div>
+        <nav className="masthead-nav">
+          <a href="#custody">Custody</a>
+          <a href="#machine">Machine</a>
+          <a href="#swarm">Swarm</a>
+          <a href="#terms">Terms</a>
           <a href="#faq">FAQ</a>
-          <a className="cta-small" href="mailto:Europa@Euroswarms.eu?subject=Pod%20waitlist">
-            Join the waitlist
-          </a>
-        </div>
-      </nav>
-
-      <header className="hero">
-        <SplitText
-          text="Your machine. Your wallet. The swarm's brain."
-          className="hero-title"
-          tag="h1"
-          splitType="words"
-          delay={90}
-          duration={0.9}
-          from={{ opacity: 0, y: 46 }}
-          to={{ opacity: 1, y: 0 }}
-        />
-        <div className="hero-sub">
-          <DecryptedText
-            text="Autonomous market-making pods for Solana, powered by Phoenix."
-            animateOn="view"
-            sequential
-            speed={28}
-            className="decrypted"
-            encryptedClassName="encrypted"
-          />
-        </div>
-        <p className="hero-line">
-          You keep the keys. You keep the capital. You keep the profits.
-          <br />
-          We run the machine — for a flat fee, never a cut.
-        </p>
-        <div className="hero-ctas">
-          <a className="cta" href="mailto:Europa@Euroswarms.eu?subject=Pod%20waitlist">
-            <ShinyText text="Join the waitlist →" speed={2.5} color="#0a0a0a" shineColor="#fff7ed" />
-          </a>
-          <a className="cta ghost" href="https://github.com/IlumCI/Eurobot" target="_blank" rel="noreferrer">
-            Read the research
-          </a>
-        </div>
-        <div className="stats">
-          <div className="stat">
-            <span className="stat-num mono">
-              <CountUp to={6} duration={1.5} />
-              /6
-            </span>
-            <span className="stat-label">simulation suites passing</span>
-          </div>
-          <div className="stat">
-            <span className="stat-num mono">
-              <CountUp to={5} duration={1.5} />
-              /5
-            </span>
-            <span className="stat-label">simulated rugs caught early</span>
-          </div>
-          <div className="stat">
-            <span className="stat-num mono">
-              $<CountUp to={10} duration={1.5} />
-            </span>
-            <span className="stat-label">reference bankroll — start small</span>
-          </div>
-          <div className="stat">
-            <span className="stat-num mono">
-              <CountUp to={0} duration={1.5} />
-            </span>
-            <span className="stat-label">times we can touch your money</span>
-          </div>
+        </nav>
+        <div className="masthead-right">
+          <span className="doc-meta">DOC. ES-001 / REV A</span>
         </div>
       </header>
 
-      <Section id="how" kicker="01 / custody" title="Non-custodial by construction, not by promise">
-        <div className="cards">
-          <SpotlightCard className="card" spotlightColor="rgba(255, 106, 0, 0.18)">
-            <span className="card-step mono">1</span>
-            <h3>Connect your wallet</h3>
-            <p>
-              Phantom connect, nothing else. Your keys are generated by you, held by you, and never leave your
-              device. Euroswarms never sees them.
-            </p>
-          </SpotlightCard>
-          <SpotlightCard className="card" spotlightColor="rgba(34, 211, 238, 0.16)">
-            <span className="card-step mono">2</span>
-            <h3>Grant a scoped delegation</h3>
-            <p>
-              Your pod receives an agent key that can open and close positions on whitelisted programs —
-              and can do <em>nothing else</em>. Withdrawals to any other address are structurally impossible.
-              Revoke it any time, instantly.
-            </p>
-          </SpotlightCard>
-          <SpotlightCard className="card" spotlightColor="rgba(255, 106, 0, 0.18)">
-            <span className="card-step mono">3</span>
-            <h3>Your pod flies</h3>
-            <p>
-              A dedicated instance of Phoenix runs for you — quoting, defending, compounding — from your
-              wallet, on pools it selects under strict venue rules. Flat subscription. Your P&amp;L is yours alone.
-            </p>
-          </SpotlightCard>
-        </div>
-      </Section>
-
-      <Section id="machine" kicker="02 / the machine" title="Phoenix: engineered around the ways small accounts die">
-        <p className="section-lede">
-          Fees, adverse selection, volatility cascades, over-trading. Every mechanism in Phoenix exists
-          because one of these kills bots like it. Each one was researched against primary literature and
-          adversarially verified before a line of it was written.
-        </p>
-        <div className="mech-grid">
-          {MECHANISMS.map(m => (
-            <div className="mech" key={m.name}>
-              <GradientText colors={EMBER} animationSpeed={6} className="mech-name">
-                {m.name}
-              </GradientText>
-              <p>{m.detail}</p>
+      {/* ---- hero ---- */}
+      <section className="hero">
+        <div className="hero-copy">
+          <SplitText
+            text="The machine is yours. The brain is shared."
+            className="hero-title"
+            tag="h1"
+            splitType="words"
+            delay={70}
+            duration={0.8}
+            textAlign="left"
+            from={{ opacity: 0, y: 24 }}
+            to={{ opacity: 1, y: 0 }}
+          />
+          <div className="hero-sub">
+            <DecryptedText
+              text="Phoenix pods make markets on Solana from your own wallet — under a delegation that can trade but can never withdraw. What pods share is intelligence. Never capital."
+              animateOn="view"
+              sequential
+              speed={12}
+              className="sub-plain"
+              encryptedClassName="sub-encrypted"
+            />
+          </div>
+          <div className="hero-actions">
+            <a className="btn btn-solid" href="mailto:Europa@Euroswarms.eu?subject=Pod%20waitlist">
+              REQUEST A POD →
+            </a>
+            <a className="btn" href="https://github.com/IlumCI/Eurobot" target="_blank" rel="noreferrer">
+              READ THE RESEARCH
+            </a>
+          </div>
+          <dl className="figures">
+            <div>
+              <dt>Simulation suites</dt>
+              <dd>
+                <CountUp to={6} duration={1.2} />
+                <span className="dim">/6</span>
+              </dd>
             </div>
-          ))}
+            <div>
+              <dt>Simulated rugs caught early</dt>
+              <dd>
+                <CountUp to={5} duration={1.2} />
+                <span className="dim">/5</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Reference bankroll</dt>
+              <dd>
+                <span className="dim">$</span>
+                <CountUp to={10} duration={1.2} />
+              </dd>
+            </div>
+            <div>
+              <dt>Access to your funds</dt>
+              <dd>
+                <CountUp to={0} duration={1.2} />
+                <span className="dim"> ever</span>
+              </dd>
+            </div>
+          </dl>
         </div>
-        <p className="mech-states mono">
-          HATCHING → FLYING → PERCHED → ASHES — the pod's state machine is visible to you at all times.
-        </p>
-      </Section>
 
-      <Section id="swarm" kicker="03 / the swarm" title="Communal intelligence. Never communal capital.">
-        <div className="swarm-split">
-          <div className="swarm-col">
-            <GradientText colors={SWARM} animationSpeed={7} className="swarm-head">
-              What pods share
-            </GradientText>
-            <ul>
-              <li>Cascade alarms — one pod smells a rug, every pod hears it</li>
-              <li>A fleet-wide token and mint blacklist</li>
-              <li>Pool crowding data, so pods spread across venues instead of eating each other's edge</li>
-              <li>Anonymized market telemetry that sharpens every detector</li>
-            </ul>
+        {/* the one dark object on the page */}
+        <aside className="telemetry" aria-label="Example pod telemetry">
+          <div className="telemetry-bar">
+            <span>POD 0x3F · MEME-USDC</span>
+            <span className="blink">●</span>
           </div>
-          <div className="swarm-col">
-            <GradientText colors={EMBER} animationSpeed={7} className="swarm-head">
-              What pods never share
-            </GradientText>
-            <ul>
-              <li>Your capital — it never pools, never commingles</li>
-              <li>Your profits and losses — strictly, structurally yours</li>
-              <li>Your keys or delegation — one pod, one wallet, one owner</li>
-            </ul>
+          <pre className="telemetry-body">{`state          FLYING
+equity         10.4172 USDC   (+4.17%)
+deploy         4.1668 USDC    (0.4 × eq)
+band           [0.0012211 , 0.0012443]
+   protective  −8.0%  below
+   re-anchor   +0.5%  above
+trend          +0.31
+hawkes n       0.12   (panic ≥ 0.70)
+lvr gauge      0.041%/d   vs fee 0.60%
+swarm          41 pods · 0 alarms · 3 vetoes
+delegation     scoped · revocable · yours`}</pre>
+          <div className="telemetry-foot">ILLUSTRATIVE DISPLAY — NOT LIVE DATA, NOT A PROJECTION</div>
+        </aside>
+      </section>
+
+      {/* ---- custody ---- */}
+      <section id="custody" className="block">
+        <RuleLabel num="01">Custody — by construction, not by promise</RuleLabel>
+        <div className="procedure">
+          <div className="step">
+            <span className="step-no">1</span>
+            <div>
+              <h3>Connect your wallet</h3>
+              <p>
+                Phantom connect, nothing more. Your keys are generated by you, held by you, and never leave
+                your device. Euroswarms never sees them.
+              </p>
+            </div>
+          </div>
+          <div className="step">
+            <span className="step-no">2</span>
+            <div>
+              <h3>Grant a scoped delegation</h3>
+              <p>
+                The pod receives an agent key that can open and close positions on whitelisted programs — and
+                can do nothing else. Withdrawal to any other address is structurally impossible. Revocation is
+                yours, instant, always.
+              </p>
+            </div>
+          </div>
+          <div className="step">
+            <span className="step-no">3</span>
+            <div>
+              <h3>The pod flies</h3>
+              <p>
+                A dedicated Phoenix instance quotes, defends and compounds from your wallet, on pools chosen
+                under strict venue rules. Flat subscription. The P&amp;L is yours alone.
+              </p>
+            </div>
           </div>
         </div>
-        <p className="swarm-line">
-          Every pod that joins makes every other pod safer and better-placed. The network effect is the
-          brain — not the bankroll.
+      </section>
+
+      {/* ---- machine ---- */}
+      <section id="machine" className="block">
+        <RuleLabel num="02">The machine — engineered around the ways small accounts die</RuleLabel>
+        <p className="lede">
+          Fees, adverse selection, volatility cascades, over-trading. Each mechanism exists because one of
+          these kills bots like it — and each was verified against the primary literature before a line of it
+          was written.
         </p>
-      </Section>
-
-      <Section id="pricing" kicker="04 / pricing" title="A flat fee. Never a cut.">
-        <div className="price-card">
-          <h3 className="mono">POD — EARLY ACCESS</h3>
-          <p className="price">
-            <span className="mono">€19</span>/month
-          </p>
-          <ul>
-            <li>One dedicated Phoenix pod, hosted and maintained</li>
-            <li>Full swarm intelligence membership</li>
-            <li>Live state, equity and defense telemetry</li>
-            <li>Cancel or revoke at any moment</li>
-          </ul>
-          <p className="price-note">
-            We deliberately charge no percentage of profits — your trading results are none of our business,
-            in the most literal sense.
-          </p>
-          <a className="cta" href="mailto:Europa@Euroswarms.eu?subject=Pod%20waitlist">
-            <ShinyText text="Request early access →" speed={2.5} color="#0a0a0a" shineColor="#fff7ed" />
-          </a>
+        <table className="spec">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Mechanism</th>
+              <th>Defends against</th>
+              <th>Implementation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {MECHANISMS.map(m => (
+              <tr key={m.id}>
+                <td className="spec-id">{m.id}</td>
+                <td className="spec-name">{m.name}</td>
+                <td className="spec-kills">{m.kills}</td>
+                <td className="spec-detail">{m.detail}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="statechart">
+          <span className="statechart-label">POD STATES</span>
+          <pre>{`HATCHING ──▶ FLYING ◀──────┐
+                │            │  calm
+                │ cascade    │
+                ▼            │
+             PERCHED ────────┘
+                │ equity floor breached
+                ▼
+              ASHES ▪ permanent      VETOED ▪ bad venue, refused at start`}</pre>
         </div>
-      </Section>
+      </section>
 
-      <Section id="faq" kicker="05 / faq" title="The questions that matter">
+      {/* ---- swarm ---- */}
+      <section id="swarm" className="block">
+        <RuleLabel num="03">The swarm — communal intelligence, never communal capital</RuleLabel>
+        <table className="ledger">
+          <tbody>
+            <tr>
+              <td className="ledger-mark yes">SHARED</td>
+              <td>Cascade alarms — one pod smells a rug, every pod hears it</td>
+            </tr>
+            <tr>
+              <td className="ledger-mark yes">SHARED</td>
+              <td>A fleet-wide token and mint blacklist</td>
+            </tr>
+            <tr>
+              <td className="ledger-mark yes">SHARED</td>
+              <td>Pool crowding data — pods spread across venues instead of eating each other's edge</td>
+            </tr>
+            <tr>
+              <td className="ledger-mark no">NEVER</td>
+              <td>Your capital — it never pools, never commingles, never moves</td>
+            </tr>
+            <tr>
+              <td className="ledger-mark no">NEVER</td>
+              <td>Your profits and losses — strictly, structurally yours</td>
+            </tr>
+            <tr>
+              <td className="ledger-mark no">NEVER</td>
+              <td>Your keys or your delegation — one pod, one wallet, one owner</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="aside-note">
+          Every pod that joins makes every other pod safer and better-placed. The network effect is the brain
+          — not the bankroll.
+        </p>
+      </section>
+
+      {/* ---- terms ---- */}
+      <section id="terms" className="block">
+        <RuleLabel num="04">Terms — a flat fee, never a cut</RuleLabel>
+        <div className="terms">
+          <div className="terms-price">
+            <span className="price-figure">€19</span>
+            <span className="price-per">per month, per pod</span>
+          </div>
+          <div className="terms-body">
+            <p>
+              One dedicated Phoenix pod, hosted and maintained. Full swarm membership. Live state, equity and
+              defense telemetry. Cancel or revoke at any moment.
+            </p>
+            <p className="terms-note">
+              We deliberately take no percentage of profits — your trading results are none of our business,
+              in the most literal sense. A fee tied to your returns would make us your manager. We are your
+              machinist.
+            </p>
+            <a className="btn btn-solid" href="mailto:Europa@Euroswarms.eu?subject=Pod%20waitlist">
+              REQUEST EARLY ACCESS →
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ---- faq ---- */}
+      <section id="faq" className="block">
+        <RuleLabel num="05">Appendix — the questions that matter</RuleLabel>
         <div className="faq">
-          {FAQS.map(f => (
+          {FAQS.map((f, i) => (
             <details key={f.q}>
-              <summary>{f.q}</summary>
+              <summary>
+                <span className="faq-no">A.{i + 1}</span>
+                {f.q}
+              </summary>
               <p>{f.a}</p>
             </details>
           ))}
         </div>
-      </Section>
+      </section>
 
-      <footer className="footer">
-        <p className="mono footer-logo">EUROSWARMS</p>
-        <p className="footer-legal">
-          Euroswarms provides software and hosting. It does not provide investment advice, portfolio
-          management, or custody of client assets. You deploy, configure and control your own pod, and you
-          can revoke its authority at any time. Automated trading of volatile crypto-assets carries a risk
-          of total loss — use only capital whose loss would not matter to you. Nothing on this page is a
-          promise of returns.
-        </p>
-        <p className="footer-contact mono">
-          <a href="mailto:Europa@Euroswarms.eu">Europa@Euroswarms.eu</a> ·{' '}
-          <a href="https://github.com/IlumCI/Eurobot" target="_blank" rel="noreferrer">
-            research repository
-          </a>
-        </p>
+      {/* ---- colophon ---- */}
+      <footer className="colophon">
+        <div className="colophon-grid">
+          <div>
+            <span className="wordmark">EUROSWARMS</span>
+            <p className="colophon-meta">
+              Built on the open Phoenix research —{' '}
+              <a href="https://github.com/IlumCI/Eurobot" target="_blank" rel="noreferrer">
+                repository
+              </a>
+              {' '}·{' '}
+              <a href="mailto:Europa@Euroswarms.eu">Europa@Euroswarms.eu</a>
+            </p>
+          </div>
+          <p className="colophon-legal">
+            Euroswarms provides software and hosting. It does not provide investment advice, portfolio
+            management, or custody of client assets. You deploy, configure and control your own pod, and you
+            can revoke its authority at any time. Automated trading of volatile crypto-assets carries a risk
+            of total loss — use only capital whose loss would not matter to you. Nothing on this page is a
+            promise of returns.
+          </p>
+        </div>
       </footer>
     </div>
   );
