@@ -24,12 +24,6 @@ from hummingbot.client.config.config_data_types import BaseConnectorConfigMap
 from hummingbot.client.config.config_helpers import ClientConfigAdapter, save_to_yml
 from hummingbot.client.config.security import Security
 from hummingbot.client.settings import CLIENT_CONFIG_PATH, CONF_DIR_PATH, STRATEGIES_CONF_DIR_PATH
-from hummingbot.strategy.avellaneda_market_making.avellaneda_market_making_config_map_pydantic import (
-    AvellanedaMarketMakingConfigMap,
-)
-from hummingbot.strategy.cross_exchange_market_making.cross_exchange_market_making_config_map_pydantic import (
-    CrossExchangeMarketMakingConfigMap,
-)
 
 encrypted_conf_prefix = "encrypted_"
 encrypted_conf_postfix = ".json"
@@ -251,92 +245,11 @@ def migrate_strategy_confs_paths():
             if "strategy" in conf and _has_connector_field(conf):
                 new_path = strategies_conf_dir_path / child.name
                 child.rename(new_path)
-                if conf["strategy"] == "avellaneda_market_making":
-                    errors.extend(migrate_amm_confs(conf, new_path))
-                elif conf["strategy"] == "cross_exchange_market_making":
-                    errors.extend(migrate_xemm_confs(conf, new_path))
+                if conf["strategy"] in ("avellaneda_market_making", "cross_exchange_market_making"):
+                    # V1 strategies removed in the standalone fork; configs are moved but not migrated
+                    logging.getLogger().info(f"Skipping config migration for removed strategy {conf['strategy']}")
+                    continue
                 logging.getLogger().info(f"Migrated conf for {conf['strategy']}")
-    return errors
-
-
-def migrate_amm_confs(conf, new_path) -> List[str]:
-    execution_timeframe = conf.pop("execution_timeframe")
-    if execution_timeframe == "infinite":
-        conf["execution_timeframe_mode"] = {}
-        conf.pop("start_time")
-        conf.pop("end_time")
-    elif execution_timeframe == "from_date_to_date":
-        conf["execution_timeframe_mode"] = {
-            "start_datetime": conf.pop("start_time"),
-            "end_datetime": conf.pop("end_time"),
-        }
-    else:
-        assert execution_timeframe == "daily_between_times"
-        conf["execution_timeframe_mode"] = {
-            "start_time": conf.pop("start_time"),
-            "end_time": conf.pop("end_time"),
-        }
-    order_levels = int(conf.pop("order_levels"))
-    if order_levels == 1:
-        conf["order_levels_mode"] = {}
-        conf.pop("level_distances")
-    else:
-        conf["order_levels_mode"] = {
-            "order_levels": order_levels,
-            "level_distances": conf.pop("level_distances")
-        }
-    hanging_orders_enabled = conf.pop("hanging_orders_enabled")
-    if not hanging_orders_enabled:
-        conf["hanging_orders_mode"] = {}
-        conf.pop("hanging_orders_cancel_pct")
-    else:
-        conf["hanging_orders_mode"] = {
-            "hanging_orders_cancel_pct": conf.pop("hanging_orders_cancel_pct")
-        }
-    if "template_version" in conf:
-        conf.pop("template_version")
-    try:
-        config_map = ClientConfigAdapter(AvellanedaMarketMakingConfigMap(**conf))
-        save_to_yml(new_path, config_map)
-        errors = []
-    except Exception as e:
-        logging.getLogger().error(str(e))
-        errors = [str(e)]
-    return errors
-
-
-def migrate_xemm_confs(conf, new_path) -> List[str]:
-    if "active_order_canceling" in conf:
-        if conf["active_order_canceling"]:
-            conf["order_refresh_mode"] = {}
-        else:
-            conf["order_refresh_mode"] = {
-                "cancel_order_threshold": conf["cancel_order_threshold"],
-                "limit_order_min_expiration": conf["limit_order_min_expiration"]
-            }
-        conf.pop("active_order_canceling")
-        conf.pop("cancel_order_threshold")
-        conf.pop("limit_order_min_expiration")
-    if "use_oracle_conversion_rate" in conf:
-        if conf["use_oracle_conversion_rate"]:
-            conf["conversion_rate_mode"] = {}
-        else:
-            conf["conversion_rate_mode"] = {
-                "taker_to_maker_base_conversion_rate": conf["taker_to_maker_base_conversion_rate"],
-                "taker_to_maker_quote_conversion_rate": conf["taker_to_maker_quote_conversion_rate"]
-            }
-        conf.pop("use_oracle_conversion_rate")
-        conf.pop("taker_to_maker_base_conversion_rate")
-        conf.pop("taker_to_maker_quote_conversion_rate")
-    if "template_version" in conf:
-        conf.pop("template_version")
-    try:
-        config_map = ClientConfigAdapter(CrossExchangeMarketMakingConfigMap(**conf))
-        save_to_yml(new_path, config_map)
-        errors = []
-    except Exception as e:
-        logging.getLogger().error(str(e))
-        errors = [str(e)]
     return errors
 
 
