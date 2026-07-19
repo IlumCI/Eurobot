@@ -1,210 +1,191 @@
-![Hummingbot](https://github.com/user-attachments/assets/3213d7f8-414b-4df8-8c1b-a0cd142a82d8)
+# Eurobot — Phoenix
 
-----
-[![License](https://img.shields.io/badge/License-Apache%202.0-informational.svg)](https://github.com/hummingbot/hummingbot/blob/master/LICENSE)
-[![Twitter](https://img.shields.io/twitter/url?url=https://twitter.com/_hummingbot?style=social&label=_hummingbot)](https://twitter.com/_hummingbot)
-[![Youtube](https://img.shields.io/youtube/channel/subscribers/UCxzzdEnDRbylLMWmaMjywOA)](https://www.youtube.com/@hummingbot)
-[![Discord](https://img.shields.io/discord/530578568154054663?logo=discord&logoColor=white&style=flat-square)](https://discord.gg/hummingbot)
+**Experimental micro-bankroll market making, built to test in production first.**
 
-Hummingbot is an open-source framework that helps you design and deploy automated trading strategies, or **bots**, that can run on many centralized or decentralized exchanges. Over the past year, Hummingbot users have generated over $34 billion in trading volume across 140+ unique trading venues.
+Eurobot is a standalone algorithmic trading codebase by [Euroswarms](mailto:Europa@Euroswarms.eu),
+born as a fork of [Hummingbot](https://github.com/hummingbot/hummingbot) and since cut loose:
+~300 KLoC of exchange connectors, legacy strategies, and their tests were removed, leaving a lean
+core (~80 KLoC) shaped around one question — *can theoretically-grounded but never-deployed trading
+mechanisms survive contact with a real market, starting from a bankroll of ten dollars?*
 
-The Hummingbot codebase is free and publicly available under the Apache 2.0 open-source license. Our mission is to **democratize high-frequency trading** by creating a global community of algorithmic traders and developers that share knowledge and contribute to the codebase.
+The flagship is **Phoenix**, a family of two market-making bots that implement mechanisms from the
+"everyone says it can't work, nobody ever risked proving it" tier of quantitative finance:
 
-## Quick Links
+| Bot | Venue | File |
+|---|---|---|
+| **Phoenix LP** | Solana CLMM pools (Meteora / Orca / Raydium, via Gateway) | `controllers/generic/phoenix_lp.py` |
+| **PMM Phoenix** | Binance perpetuals (order-book market making) | `controllers/market_making/pmm_phoenix.py` |
 
-* [Website and Docs](https://hummingbot.org): Official Hummingbot website and documentation
-* [Installation](https://hummingbot.org/installation/): Install Hummingbot on various platforms
-* [Discord](https://discord.gg/hummingbot): The main gathering spot for the global Hummingbot community
-* [YouTube](https://www.youtube.com/c/hummingbot): Videos that teach you how to get the most out of Hummingbot
-* [Spotify Podcast - The Bot Pod](https://open.spotify.com/show/1muzSO0SZqYBVQu2DXzGB1?si=ae9a9c0674c64b45): Weekly livestream and podcast by Hummingbot maintainers
-* [Twitter](https://twitter.com/_hummingbot): Get the latest announcements about Hummingbot
-* [Reported Volumes](https://reporting.hummingbot.org/): Reported trading volumes across all Hummingbot instances
-* [Newsletter](https://hummingbot.substack.com): Get our newsletter whenever we ship a new release
-
-## Getting Started
-
-The easiest way to get started with Hummingbot is using Docker:
-
-* To install the Telegram Bot [Condor](https://github.com/hummingbot/condor), follow the instructions in the [Condor docs](https://hummingbot.org/condor/) site.
-
-* To install the CLI-based Hummingbot client, follow the instructions below.
-
-Alternatively, if you are building new connectors/strategies or adding custom code, see the [Install from Source](https://hummingbot.org/client/installation/#source-installation) section in the documentation.
-
-### Install Hummingbot with Docker
-
-Install [Docker Compose website](https://docs.docker.com/compose/install/).
-
-Clone the repo and use the provided `docker-compose.yml` file:
-
-```bash
-# Clone the repository
-git clone https://github.com/hummingbot/hummingbot.git
-cd hummingbot
-
-# Run Setup & Deploy
-make setup
-make deploy
-
-# Attach to the running instance
-docker attach hummingbot
-```
-
-### Install Hummingbot from Source
-
-Clone the repo, install dependencies, and run Hummingbot directly from source:
-
-```bash
-# Clone the repository
-git clone https://github.com/hummingbot/hummingbot.git
-cd hummingbot
-
-# Install from source
-make install
-
-# Run Hummingbot
-make run
-```
-
-### Install Hummingbot + Gateway DEX Middleware
-
-Gateway provides standardized connectors for interacting with automatic market maker (AMM) decentralized exchanges (DEXs) across different blockchain networks.
-
-To run Hummingbot with Gateway, clone the repo and answer `y` when prompted after running `make setup`
-
-```yaml
-# Clone the repository
-git clone https://github.com/hummingbot/hummingbot.git
-cd hummingbot
-```
-```bash
-make setup
-
-# Answer `y` when prompted
-Include Gateway? [y/N]
-```
-
-Then run:
-```bash
-make deploy
-
-# Attach to the running instance
-docker attach hummingbot
-```
-
-By default, Gateway will start in development mode with unencrypted HTTP endpoints. To run in production mode with encrypted HTTPS, use the `DEV=false` flag and run `gateway generate-certs` in Hummingbot to generate the certificates needed. See [Development vs Production Modes](https://hummingbot.org/gateway/installation/#development-vs-production-modes) for more information.
+Both are designed around the failure modes that kill small accounts: fees, adverse selection,
+volatility cascades, and over-trading. Neither pretends a $10 bankroll is anything but an
+experiment — the point is that the experiment is *survivable, instrumented, and honest*.
 
 ---
 
-For comprehensive installation instructions and troubleshooting, visit our [Installation](https://hummingbot.org/installation/) documentation.
+## The theory, and how each piece is implemented
 
-## Getting Help
+Every mechanism below was researched and adversarially verified against primary sources before a
+line of it was written — the full ranked catalog, with citations, verification votes, and the
+archive directory it was mined from, lives in [`research/esoteric_strategies.md`](research/esoteric_strategies.md).
 
-If you encounter issues or have questions, here's how you can get assistance:
+### 1. Loss-versus-rebalancing as the null hypothesis (venue selection is the alpha)
+An AMM liquidity provider bleeds exactly **σ²/8** of position value per unit time to arbitrageurs
+(Milionis et al.). Most LP strategies die here before their signal ever matters. Phoenix LP treats
+this as a *venue filter*, not a fate: it refuses pools below a minimum fee tier
+(`min_pool_fee_pct`), refuses pump.fun-launched tokens by checking the on-chain mint suffix
+(`banned_ca_suffixes`), and displays a live LVR gauge (realized σ² / 8 vs. pool fee) so the
+operator can see the breakeven race in `status`. The empirical record says long-tail, high-fee
+pools are where fees beat the bleed — so that is the only regime the bot consents to trade in.
 
-* Consult our [FAQ](https://hummingbot.org/faq/), [Troubleshooting Guide](https://hummingbot.org/troubleshooting/), or [Glossary](https://hummingbot.org/glossary/)
-* To report bugs or suggest features, submit a [GitHub issue](https://github.com/hummingbot/hummingbot/issues)
-* Join our [Discord community](https://discord.gg/hummingbot) and ask questions in the #support channel
+### 2. Asymmetric τ-reset bands (the anti-impermanent-loss geometry)
+The published evidence on concentrated liquidity is brutal: tight always-rebalancing bands
+produced ≈ −100% annualized in backtests, while the same strategy with *asymmetric downside
+protection* beat buy-and-hold with lower drawdown. Phoenix LP implements this directly in the
+position's auto-close limits: a tight trip **above** the band (`upper_rebalance_pct`, re-anchor
+fast when price exits upward) and a wide protective zone **below** (`protective_zone_pct`) so that
+dumps do *not* trigger relocation — impermanent loss is never crystallized at the bottom of a
+wick. A hard `min_rebalance_interval` enforces the other half of the finding: over-rebalancing,
+not bad placement, is the documented LP killer.
 
-We pledge that we will not use the information/data you provide us for trading purposes nor share them with third parties.
+### 3. Avellaneda–Stoikov, ported to band geometry (previously theory-only)
+The classic market-making optimum — reservation price shifted against inventory, spread set by
+risk aversion × volatility × fill intensity — had been mapped to AMMs only on paper, never
+deployed. Phoenix LP uses the A-S reservation price as the **band center** (inventory read from
+the token ratio it actually holds) and the A-S optimal spread as the **band width**
+(`as_gamma`, `as_kappa`, floored and capped). The bot quotes one side at a time — a bid band of
+quote below price, an ask band of base above — flipping with hysteresis as fills convert
+inventory, which is bid/ask market making expressed in liquidity bins.
 
-## Exchange Connectors
+### 4. Hawkes-process cascade detection (the rug alarm)
+Sell flow on a dying token is *self-exciting*: each dump triggers more. Phoenix LP fits an
+exponential-kernel Hawkes process by expectation-maximization on down-move events from the
+sampled pool price stream, with two twists found the hard way in simulation: **marked events**
+(a move worth k× the detection threshold counts k times — otherwise a violent cascade saturates
+into a regular event stream that the EM correctly, and uselessly, attributes to background rate)
+and a **composite score** (the EM branching ratio reads clustering pattern and blocks re-entry
+after a storm; a burst-intensity term against a robust-MAD adaptive baseline catches the storm
+*live*). Above the panic threshold the bot pulls its position, and — via **panic flatten** —
+market-sells any held base through the swap provider: it exits the *token*, not just the
+position. In simulated rugs across five seeds it perched at −3.5% to −9.9% of dumps that
+finished at −37% to −48%.
 
-Hummingbot connectors standardize REST and WebSocket API interfaces to different types of exchanges, enabling you to build sophisticated trading strategies that can be deployed across many exchanges with minimal changes.
+### 5. Ergodicity economics, minus the metaphysics (sizing)
+The one result from the ergodicity literature that survives adversarial scrutiny: a single
+compounding bankroll must maximize time-average growth, which has an interior optimum in position
+size — and full Kelly is far too aggressive for fat-tailed venues. Phoenix deploys a
+**sub-Kelly fraction of live equity** (`kelly_fraction`, default 0.4×), where equity is the
+bankroll plus realized PnL from settled positions, capped at `max_compound_factor`. Wins compound
+the next quote; the refuted parts of the theory were left in the literature.
 
-### Connector Types
+### 6. The ashes floor (ruin is absorbing)
+If equity breaches `ashes_floor_pct` of the starting bankroll the bot halts *permanently* —
+state `ASHES` — and flattens what remains. A second, independent kill switch
+(`max_global_drawdown_quote` in the runner config) sits underneath it. Volatility harvesting
+mathematics only works if you are still alive to rebalance.
 
-We classify exchange connectors into three main categories:
+### How this differs from the usual bot
 
-* **CLOB CEX**: Centralized exchanges with central limit order books that take custody of your funds. Connect via API keys.
-  - **Spot**: Trading spot markets
-  - **Perpetual**: Trading perpetual futures markets
+| The usual | Phoenix |
+|---|---|
+| Symmetric spreads / bands around mid | Asymmetric: protective below, aggressive above, trend-leaned center |
+| Rebalance on a timer | Event-driven only, with a hard minimum interval |
+| Volatility circuit breaker (reactive) | Self-excitation detector (anticipatory) + volatility fallback |
+| Position sizing = fixed amount | Sub-Kelly fraction of live equity, compounding, capped |
+| "Stop loss" closes the position | Panic flatten exits the token entirely |
+| Backtest-first, prod maybe | Test-in-prod-first: sim harness with latency/staleness models, prod is the test generator |
+| Any pool with volume | Venue guards: fee-tier floor, pump.fun mint veto, live LVR gauge |
 
-* **CLOB DEX**: Decentralized exchanges with on-chain central limit order books. Non-custodial, connect via wallet keys.
-  - **Spot**: Trading spot markets on-chain
-  - **Perpetual**: Trading perpetual futures on-chain
+---
 
-* **AMM DEX**: Decentralized exchanges using Automated Market Maker protocols. Non-custodial, connect via Gateway middleware.
-  - **Router**: DEX aggregators that find optimal swap routes
-  - **AMM**: Traditional constant product (x*y=k) pools
-  - **CLMM**: Concentrated Liquidity Market Maker pools with custom price ranges
+## How to use it
 
-### Exchange Sponsors
+### Prerequisites
+- Docker (or a source install: `./install`, then `conda activate hummingbot && ./compile`)
+- For Phoenix LP: a running [Gateway](https://github.com/hummingbot/gateway) instance with a
+  Solana wallet holding your quote stable (USDC) **plus ~0.08 SOL** for transaction fees and
+  refundable position rent
+- For PMM Phoenix: Binance API keys connected via `connect binance_perpetual`
 
-We are grateful for the following exchanges that support the development and maintenance of Hummingbot via broker partnerships and sponsorships.
+### Phoenix LP (Solana CLMM)
+1. Pick a pool per the research: long-tail token, fee tier ≥ 0.25% (Meteora dynamic-fee pools
+   are ideal), real volume, and *not* a pump.fun mint — the bot re-checks the mint on-chain and
+   vetoes itself if you get this wrong.
+2. Edit `conf/controllers/phoenix_lp.yml`: set `trading_pair` and `pool_address`
+   (every other parameter ships with researched defaults for a $10 bankroll).
+3. Start the client and run:
+   ```
+   start --script v2_with_controllers.py --conf v2_phoenix_lp.yml
+   ```
+4. Watch `status`: it shows the state machine (`HATCHING → FLYING`, `PERCHED` on cascade panic,
+   `ASHES`/`VETOED` as terminal states), live equity, trend score, Hawkes cascade score, and the
+   LVR breakeven gauge.
 
-| Exchange | Type | Sub-Type(s) | Connector ID(s) | Discount |
-|------|------|------|-------|----------|
-| [Binance](https://hummingbot.org/exchanges/binance/) | CLOB CEX | Spot, Perpetual | `binance`, `binance_perpetual` | [![Sign up for Binance using Hummingbot's referral link for a 10% discount!](https://img.shields.io/static/v1?label=Fee&message=%2d10%25&color=orange)](https://accounts.binance.com/register?ref=CBWO4LU6) |
-| [BitMart](https://hummingbot.org/exchanges/bitmart/) | CLOB CEX | Spot, Perpetual | `bitmart`, `bitmart_perpetual` | [![Sign up for BitMart using Hummingbot's referral link!](https://img.shields.io/static/v1?label=Sponsor&message=Link&color=orange)](https://www.bitmart.com/invite/Hummingbot/en) |
-| [Bitget](https://hummingbot.org/exchanges/bitget/) | CLOB CEX | Spot, Perpetual | `bitget`, `bitget_perpetual` | [![Sign up for Bitget using Hummingbot's referral link!](https://img.shields.io/static/v1?label=Sponsor&message=Link&color=orange)](https://www.bitget.com/expressly?channelCode=v9cb&vipCode=26rr&languageType=0) |
-| [Derive](https://hummingbot.org/exchanges/derive/) | CLOB DEX | Spot, Perpetual | `derive`, `derive_perpetual` | [![Sign up for Derive using Hummingbot's referral link!](https://img.shields.io/static/v1?label=Sponsor&message=Link&color=orange)](https://www.derive.xyz/invite/7SA0V) |
-| [dYdX](https://hummingbot.org/exchanges/dydx/) | CLOB DEX | Perpetual | `dydx_v4_perpetual` | - |
-| [Gate.io](https://hummingbot.org/exchanges/gate-io/) | CLOB CEX | Spot, Perpetual | `gate_io`, `gate_io_perpetual` | [![Sign up for Gate.io using Hummingbot's referral link for a 20% discount!](https://img.shields.io/static/v1?label=Fee&message=%2d20%25&color=orange)](https://www.gate.io/referral/invite/HBOTGATE_0_103) |
-| [HTX (Huobi)](https://hummingbot.org/exchanges/htx/) | CLOB CEX | Spot | `htx` | [![Sign up for HTX using Hummingbot's referral link for a 20% discount!](https://img.shields.io/static/v1?label=Fee&message=%2d20%25&color=orange)](https://www.htx.com.pk/invite/en-us/1h?invite_code=re4w9223) |
-| [Hyperliquid](https://hummingbot.org/exchanges/hyperliquid/) | CLOB DEX | Spot, Perpetual | `hyperliquid`, `hyperliquid_perpetual` | - |
-| [KuCoin](https://hummingbot.org/exchanges/kucoin/) | CLOB CEX | Spot, Perpetual | `kucoin`, `kucoin_perpetual` | [![Sign up for Kucoin using Hummingbot's referral link for a 20% discount!](https://img.shields.io/static/v1?label=Fee&message=%2d20%25&color=orange)](https://www.kucoin.com/r/af/hummingbot) |
-| [OKX](https://hummingbot.org/exchanges/okx/) | CLOB CEX | Spot, Perpetual | `okx`, `okx_perpetual` | [![Sign up for OKX using Hummingbot's referral link for a 20% discount!](https://img.shields.io/static/v1?label=Fee&message=%2d20%25&color=orange)](https://www.okx.com/join/1931920269) |
-| [XRP Ledger](https://hummingbot.org/exchanges/xrpl/) | CLOB DEX | Spot | `xrpl` | - |
+### PMM Phoenix (Binance perpetuals)
+```
+start --script v2_with_controllers.py --conf v2_phoenix.yml
+```
+Preset in `conf/controllers/phoenix_micro.yml`: $10, DOGE-USDT, 5× leverage, fee-floor spreads,
+momentum lean, volatility circuit breaker, compounding with the same ashes floor.
 
-### Other Exchange Connectors
+### Run the simulation suite (no exchange, no funds, no install)
+The whole-controller integration harness — mocked framework, simulated pool, RPC latency, stale
+data, slow executor lifecycle, and chop/trend/rug regimes — runs on bare Python:
+```
+python research/phoenix_lp_sim.py
+```
+Six scenario suites assert warm-up, band geometry, side-flipping, rug defense, venue vetoes,
+ashes permanence, latency tolerance, and compounding. This harness found four real bugs before
+any money did; extend it before you extend the bot.
 
-Currently, the master branch of Hummingbot also includes the following exchange connectors, which are maintained and updated through the Hummingbot Foundation governance process. See [Governance](https://hummingbot.org/governance/) for more information.
+---
 
-| Exchange | Type | Sub-Type(s) | Connector ID(s) | Discount |
-|------|------|------|-------|----------|
-| [0x Protocol](https://hummingbot.org/exchanges/gateway/0x/) | AMM DEX | Router | `0x` | - |
-| [Aevo](https://hummingbot.org/exchanges/aevo/) | CLOB CEX | Perpetual | `aevo_perpetual` | - |
-| [Architect](https://hummingbot.org/exchanges/architect/) | CLOB CEX | Perpetual | `architect_perpetual` | - |
-| [AscendEx](https://hummingbot.org/exchanges/ascendex/) | CLOB CEX | Spot | `ascend_ex` | - |
-| [Backpack](https://hummingbot.org/exchanges/backpack/) | CLOB CEX | Spot, Perpetual | `backpack`, `backpack_perpetual` | - |
-| [Balancer](https://hummingbot.org/exchanges/gateway/balancer/) | AMM DEX | AMM | `balancer` | - |
-| [BingX](https://hummingbot.org/exchanges/bing_x/) | CLOB CEX | Spot | `bing_x` | - |
-| [Bitrue](https://hummingbot.org/exchanges/bitrue/) | CLOB CEX | Spot | `bitrue` | - |
-| [Bitstamp](https://hummingbot.org/exchanges/bitstamp/) | CLOB CEX | Spot | `bitstamp` | - |
-| [BTC Markets](https://hummingbot.org/exchanges/btc-markets/) | CLOB CEX | Spot | `btc_markets` | - |
-| [Bybit](https://hummingbot.org/exchanges/bybit/) | CLOB CEX | Spot, Perpetual | `bybit`, `bybit_perpetual` | - |
-| [Coinbase](https://hummingbot.org/exchanges/coinbase/) | CLOB CEX | Spot | `coinbase_advanced_trade` | - |
-| [Cube](https://hummingbot.org/exchanges/cube/) | CLOB CEX | Spot | `cube` | - |
-| [Curve](https://hummingbot.org/exchanges/gateway/curve/) | AMM DEX | AMM | `curve` | - |
-| [Decibel](https://hummingbot.org/exchanges/decibel/) | CLOB CEX | Perpetual | `decibel_perpetual` | - |
-| [Dexalot](https://hummingbot.org/exchanges/dexalot/) | CLOB DEX | Spot | `dexalot` | - |
-| [EVEDEX](https://hummingbot.org/exchanges/evedex/) | CLOB CEX | Perpetual | `evedex_perpetual` | - |
-| [Foxbit](https://hummingbot.org/exchanges/foxbit/) | CLOB CEX | Spot | `foxbit` | - |
-| [GRVT](https://hummingbot.org/exchanges/grvt/) | CLOB CEX | Perpetual | `grvt_perpetual` | - |
-| [Injective Helix](https://hummingbot.org/exchanges/injective/) | CLOB DEX | Spot, Perpetual | `injective_v2`, `injective_v2_perpetual` | - |
-| [Jupiter](https://hummingbot.org/exchanges/gateway/jupiter/) | AMM DEX | Router | `jupiter` | - |
-| [Kraken](https://hummingbot.org/exchanges/kraken/) | CLOB CEX | Spot | `kraken` | - |
-| [Meteora](https://hummingbot.org/exchanges/gateway/meteora/) | AMM DEX | CLMM | `meteora` | - |
-| [MEXC](https://hummingbot.org/exchanges/mexc/) | CLOB CEX | Spot | `mexc` | - |
-| [NDAX](https://hummingbot.org/exchanges/ndax/) | CLOB CEX | Spot | `ndax` | - |
-| [Pacifica](https://hummingbot.org/exchanges/pacifica/) | CLOB CEX | Perpetual | `pacifica_perpetual` | - |
-| [PancakeSwap](https://hummingbot.org/exchanges/gateway/pancakeswap/) | AMM DEX | AMM | `pancakeswap` | - |
-| [QuickSwap](https://hummingbot.org/exchanges/gateway/quickswap/) | AMM DEX | AMM | `quickswap` | - |
-| [Raydium](https://hummingbot.org/exchanges/gateway/raydium/) | AMM DEX | AMM, CLMM | `raydium` | - |
-| [SushiSwap](https://hummingbot.org/exchanges/gateway/sushiswap/) | AMM DEX | AMM | `sushiswap` | - |
-| [Trader Joe](https://hummingbot.org/exchanges/gateway/traderjoe/) | AMM DEX | AMM | `traderjoe` | - |
-| [Uniswap](https://hummingbot.org/exchanges/gateway/uniswap/) | AMM DEX | Router, AMM, CLMM | `uniswap` | - |
-| [Vertex](https://hummingbot.org/exchanges/vertex/) | CLOB DEX | Spot | `vertex` | - |
+## What this fork keeps from Hummingbot
 
-## Other Hummingbot Repos
+Eurobot stands on Hummingbot's shoulders and keeps its load-bearing layers intact:
 
-* [Condor](https://github.com/hummingbot/condor): Telegram Interface for Hummingbot
-* [Hummingbot API](https://github.com/hummingbot/hummingbot-api): The central hub for running Hummingbot trading bots
-* [Hummingbot MCP](https://github.com/hummingbot/mcp): Enables AI assistants like Claude and Gemini to interact with Hummingbot for automated cryptocurrency trading across multiple exchanges.
-* [Quants Lab](https://github.com/hummingbot/quants-lab): Jupyter notebooks that enable you to fetch data and perform research using Hummingbot
-* [Gateway](https://github.com/hummingbot/gateway): Typescript based API client for DEX connectors
-* [Hummingbot Site](https://github.com/hummingbot/hummingbot-site): Official documentation for Hummingbot - we welcome contributions here too!
+- **Strategy V2 framework** (`hummingbot/strategy_v2/`) — the controller/executor architecture:
+  Phoenix controllers emit executor actions; `lp_executor`, `order_executor`, and
+  `position_executor` handle order lifecycle, retries, and accounting.
+- **Gateway client** (`hummingbot/connector/gateway/`, `hummingbot/core/gateway/`) — the entire
+  Solana path: pool info, add/remove liquidity, swaps on Meteora/Orca/Raydium via Jupiter.
+- **Binance spot + perpetual connectors** and their candle feeds — for the CEX variant
+  (plus the Hyperliquid perpetual connector, reserved for future perp-hedged LP work).
+- **The client CLI** (`hummingbot/client/`) — config system, `start`/`status` commands.
+- **Core plumbing** (`hummingbot/core/`) — clock, events, order books, a trimmed rate oracle.
+- **SQLite persistence** (`hummingbot/model/`) — every executor and fill is recorded, which is
+  the forensic record the test-in-prod ethos depends on.
 
-## Contributions
+Removed relative to upstream: 43 exchange/derivative connectors, the entire V1 strategy engine,
+25 candle feeds, ~180 KLoC of tests for deleted code, and all demo strategies and scripts. What
+remains is documented above; what was cut is one `git log` away.
 
-The Hummingbot architecture features modular components that can be maintained and extended by individual community members.
+Hummingbot is licensed under Apache 2.0; this fork retains that license and its attribution
+(see `LICENSE`). If you want a general-purpose trading framework with 140+ venue connectors and
+a large community, use [upstream Hummingbot](https://hummingbot.org) — it is excellent. Use
+Eurobot if you want a small, sharp, experimental codebase with opinions.
 
-We welcome contributions from the community! Please review these [guidelines](./CONTRIBUTING.md) before submitting a pull request.
+## Repository map
 
-To have your exchange connector or other pull request merged into the codebase, please submit a New Connector Proposal or Pull Request Proposal, following these [guidelines](https://hummingbot.org/about/proposals/). Note that you will need some amount of [HBOT tokens](https://etherscan.io/token/0xe5097d9baeafb89f9bcb78c9290d545db5f9e9cb) in your Ethereum wallet to submit a proposal.
+```
+controllers/
+  generic/phoenix_lp.py          # Phoenix LP: the Solana CLMM bot (flagship)
+  market_making/pmm_phoenix.py   # PMM Phoenix: the Binance perpetuals variant
+  generic/lp_rebalancer/         # reference CLMM controller (upstream)
+  generic/{stat_arb,xemm_multiple_levels,arbitrage_controller}.py   # kept as references
+conf/controllers/                # deployable presets (phoenix_lp.yml, phoenix_micro.yml)
+conf/scripts/                    # runner configs (v2_phoenix_lp.yml, v2_phoenix.yml)
+scripts/v2_with_controllers.py   # the only runner script
+research/
+  esoteric_strategies.md         # the verified strategy catalog + source archive directory
+  phoenix_lp_sim.py              # whole-controller integration simulation
+hummingbot/                      # the retained framework core (see above)
+test/hummingbot/strategy_v2/     # regression tests for the layer Phoenix stands on
+```
 
-## Legal
+## Disclaimer
 
-* **License**: Hummingbot is open source and licensed under [Apache 2.0](./LICENSE).
-* **Data collection**: See [Reporting](https://hummingbot.org/reporting/) for information on anonymous data collection and reporting in Hummingbot.
+This is experimental software for experimental capital. It trades volatile on-chain assets with
+mechanisms that are, by deliberate design, largely untested in production — that is the research
+program, not an oversight. Nothing here is financial advice. Do not fund it with money whose loss
+would matter: the reference deployment is **ten dollars**, and every defense in the codebase
+(vetoes, floors, flatten, kill switches) exists because ten dollars can still be lost.
