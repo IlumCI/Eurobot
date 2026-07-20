@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase, phantom, walletAddress, configError } from './supabase.js';
 
 // SIWS requires an ASCII-only statement — the non-ASCII "ä" makes Phantom reject the
@@ -26,29 +26,20 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  // Create/refresh the user's profile row with their verified wallet address.
-  const ensureProfile = useCallback(async user => {
-    const addr = walletAddress();
-    if (!user || !addr) return;
-    const { error: e } = await supabase.from('profiles').upsert(
-      { id: user.id, wallet_address: addr },
-      { onConflict: 'id' },
-    );
-    if (e) console.warn('profile upsert failed:', e.message);
-  }, []);
-
+  // The profiles row is created server-side from the verified identity (DB trigger),
+  // so the client never asserts the wallet address — it only reads the session.
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setReady(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      if (s?.user) ensureProfile(s.user);
-    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
-  }, [ensureProfile]);
+  }, []);
+
+  // Prefer the verified wallet from the session (survives reload); fall back to the live wallet.
+  const address = session?.user?.user_metadata?.custom_claims?.address || walletAddress();
 
   const connect = async () => {
     setError('');
@@ -97,7 +88,7 @@ export default function App() {
       {session ? (
         <main className="panel">
           <p className="kicker mono">SIGNED IN</p>
-          <h1 className="addr mono">{short(walletAddress()) || 'wallet connected'}</h1>
+          <h1 className="addr mono">{short(address) || 'wallet connected'}</h1>
           <p className="dim">
             You're authenticated by wallet signature — no password, and Vältgeist never held a key to
             get here. Your pod, config, and telemetry will live in this dashboard next.
