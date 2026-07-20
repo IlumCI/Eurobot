@@ -725,3 +725,86 @@ a {
     border-top: none;
   }
 }
+
+@media (max-width: 640px) {
+  /* Spec table can't fit 4 columns on a phone — stack each mechanism as a card. */
+  .spec thead {
+    display: none;
+  }
+  .spec,
+  .spec tbody,
+  .spec tr,
+  .spec td {
+    display: block;
+  }
+  .spec {
+    border-top: none;
+  }
+  .spec tr {
+    border-top: 2px solid var(--ink);
+    padding: 1rem 0;
+  }
+  .spec tr:last-child {
+    border-bottom: 1px solid var(--hairline);
+  }
+  .spec td {
+    border: none;
+    padding: 0.15rem 0;
+    max-width: none;
+    white-space: normal;
+    width: auto;
+  }
+  .spec-id {
+    display: inline;
+  }
+  .spec-name {
+    display: inline;
+    margin-left: 0.5rem;
+  }
+  .spec-kills {
+    margin-top: 0.45rem;
+    font-size: 0.78rem;
+  }
+  .spec-kills::before {
+    content: '↳ defends against — ';
+    color: var(--signal);
+  }
+  .spec-detail {
+    margin-top: 0.45rem;
+  }
+
+  /* Buttons: full-width stack so they never crowd or merge. */
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hero-actions .btn {
+    text-align: center;
+  }
+
+  /* Fixed-width diagrams scroll inside their own box, never past the page edge. */
+  .telemetry-body,
+  .statechart pre {
+    font-size: 0.72rem;
+  }
+  .statechart {
+    display: block;
+  }
+  .statechart pre {
+    margin-top: 0.6rem;
+  }
+
+  /* Swarm ledger: let the text column breathe. */
+  .ledger-mark {
+    width: 5.2rem;
+    padding-right: 0.6rem;
+  }
+
+  /* Figures: two per row reads better than four cramped columns. */
+  .figures {
+    grid-template-columns: 1fr 1fr;
+  }
+  .figures > div:nth-child(2n) {
+    border-right: none;
+  }
+}

@@ -19,6 +19,24 @@ function useTheme() {
   return [theme, setTheme];
 }
 
+// The gsap SplitText / motion animations re-run on every viewport resize, which mobile
+// browsers trigger constantly as the address bar hides on scroll — breaking the text.
+// Run them on desktop only; mobile gets the clean static (already-prerendered) content.
+function useIsDesktop() {
+  const [desktop, setDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 768px)').matches : true);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const on = e => setDesktop(e.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return desktop;
+}
+
+const HERO_SUB =
+  'The strategy research. The execution engine. The risk machinery. The live telemetry. Missing by design: the pool, the manager, the lockup, the 2-and-20. A prop desk of one, on Solana — trading your own capital from a vault only you can withdraw from, under a delegation that rebalances your liquidity but can never move funds out.';
+
 const MECHANISMS = [
   {
     id: 'M-01',
@@ -103,6 +121,8 @@ function RuleLabel({ num, children }) {
 
 export default function App() {
   const [theme, setTheme] = useTheme();
+  const isDesktop = useIsDesktop();
+  const n = to => (isDesktop ? <CountUp to={to} duration={1.2} /> : to);
   return (
     <div className="doc">
       {/* ---- masthead ---- */}
@@ -135,26 +155,34 @@ export default function App() {
       {/* ---- hero ---- */}
       <section className="hero">
         <div className="hero-copy">
-          <SplitText
-            text="Everything a hedge fund has. Except the fund."
-            className="hero-title"
-            tag="h1"
-            splitType="words"
-            delay={70}
-            duration={0.8}
-            textAlign="left"
-            from={{ opacity: 0, y: 24 }}
-            to={{ opacity: 1, y: 0 }}
-          />
-          <div className="hero-sub">
-            <DecryptedText
-              text="The strategy research. The execution engine. The risk machinery. The live telemetry. Missing by design: the pool, the manager, the lockup, the 2-and-20. A prop desk of one, on Solana — trading your own capital from a vault only you can withdraw from, under a delegation that rebalances your liquidity but can never move funds out."
-              animateOn="view"
-              sequential
-              speed={10}
-              className="sub-plain"
-              encryptedClassName="sub-encrypted"
+          {isDesktop ? (
+            <SplitText
+              text="Everything a hedge fund has. Except the fund."
+              className="hero-title"
+              tag="h1"
+              splitType="words"
+              delay={70}
+              duration={0.8}
+              textAlign="left"
+              from={{ opacity: 0, y: 24 }}
+              to={{ opacity: 1, y: 0 }}
             />
+          ) : (
+            <h1 className="hero-title">Everything a hedge fund has. Except the fund.</h1>
+          )}
+          <div className="hero-sub">
+            {isDesktop ? (
+              <DecryptedText
+                text={HERO_SUB}
+                animateOn="view"
+                sequential
+                speed={10}
+                className="sub-plain"
+                encryptedClassName="sub-encrypted"
+              />
+            ) : (
+              <span className="sub-plain">{HERO_SUB}</span>
+            )}
           </div>
           <div className="hero-actions">
             <a className="btn btn-solid" href="#waitlist">
@@ -168,14 +196,14 @@ export default function App() {
             <div>
               <dt>Simulation suites</dt>
               <dd>
-                <CountUp to={6} duration={1.2} />
+                {n(6)}
                 <span className="dim">/6</span>
               </dd>
             </div>
             <div>
               <dt>Simulated rugs caught early</dt>
               <dd>
-                <CountUp to={5} duration={1.2} />
+                {n(5)}
                 <span className="dim">/5</span>
               </dd>
             </div>
@@ -183,13 +211,13 @@ export default function App() {
               <dt>Reference bankroll</dt>
               <dd>
                 <span className="dim">$</span>
-                <CountUp to={10} duration={1.2} />
+                {n(10)}
               </dd>
             </div>
             <div>
               <dt>Access to your funds</dt>
               <dd>
-                <CountUp to={0} duration={1.2} />
+                {n(0)}
                 <span className="dim"> ever</span>
               </dd>
             </div>
