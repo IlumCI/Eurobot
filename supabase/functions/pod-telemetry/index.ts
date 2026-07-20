@@ -18,8 +18,12 @@ function timingSafeEqual(a: string, b: string): boolean {
   return out === 0;
 }
 
-const NUMERIC = ["equity", "deploy", "trend", "hawkes_n", "lvr_daily", "band_lower", "band_upper"];
+const NUMERIC = [
+  "equity", "deploy", "trend", "hawkes_n", "lvr_daily", "band_lower", "band_upper",
+  "price", "pnl", "fees_earned",
+];
 const STATES = ["HATCHING", "FLYING", "PERCHED", "ASHES", "VETOED"];
+const POSITIONS = ["idle", "opening", "bid_in", "bid_out", "ask_in", "ask_out", "closing"];
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
@@ -50,6 +54,9 @@ Deno.serve(async (req) => {
   const row: Record<string, unknown> = { pod_id, updated_at: new Date().toISOString() };
   if (typeof state.runtime_state === "string" && STATES.includes(state.runtime_state)) {
     row.runtime_state = state.runtime_state;
+  }
+  if (typeof state.position === "string" && POSITIONS.includes(state.position)) {
+    row.position = state.position;
   }
   for (const k of NUMERIC) {
     if (typeof state[k] === "number" && Number.isFinite(state[k])) row[k] = state[k];

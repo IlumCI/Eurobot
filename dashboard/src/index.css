@@ -283,6 +283,17 @@ a {
 .telem-note {
   color: var(--dim);
 }
+.telem-sep {
+  height: 1px;
+  background: var(--hair);
+  margin: 0.55rem 0;
+}
+.gain {
+  color: #3ecf8e;
+}
+.loss {
+  color: var(--signal);
+}
 .telem-foot {
   padding: 0.5rem 0.9rem;
   border-top: 1px solid var(--hair);

@@ -118,6 +118,23 @@ async def tick(ctrl, clock, pool, executors, dt):
                     ex.request_close(4.0)
 
 
+def _position_code(active):
+    """Turn the active LP executor into a small status vocabulary the UI renders."""
+    if not active:
+        return "idle"
+    side = "bid" if active.get("initial_quote_amount", 0) > 0 else "ask"
+    st = active.get("state")
+    if st == "OPENING":
+        return "opening"
+    if st == "CLOSING":
+        return "closing"
+    if st == "IN_RANGE":
+        return f"{side}_in"
+    if st == "OUT_OF_RANGE":
+        return f"{side}_out"
+    return "opening"
+
+
 def extract(ctrl, executors, price):
     """Pull the dashboard telemetry out of the live controller state."""
     active = None
@@ -125,9 +142,19 @@ def extract(ctrl, executors, price):
         info = getattr(ex, "custom_info", {}) or {}
         if getattr(ex, "is_active", False) and "lower_price" in info:
             active = info
+    # Cumulative LP fees across every position this pod has ever held, in quote units.
+    fees = 0.0
+    for ex in executors:
+        info = getattr(ex, "custom_info", {}) or {}
+        fees += float(info.get("quote_fee", 0.0)) + float(info.get("base_fee", 0.0)) * price
+    equity = float(ctrl.equity())
     state = {
         "runtime_state": ctrl.state,
-        "equity": float(ctrl.equity()),
+        "position": _position_code(active),
+        "price": price,
+        "equity": equity,
+        "pnl": equity - float(ctrl.config.total_amount_quote),  # equity starts at initial capital
+        "fees_earned": fees,
         "deploy": float(ctrl.deploy_amount_quote()),
         "trend": float(ctrl._trend),
         "hawkes_n": float(ctrl._branching_ratio),
@@ -182,10 +209,9 @@ async def main():
         state = extract(ctrl, executors, path.price)
         n += 1
         if DRY:
-            band = (f"[{state['band_lower']:.8g},{state['band_upper']:.8g}]"
-                    if "band_lower" in state else "—")
-            print(f"t+{int(n * POLL):>4}s {state['runtime_state']:<8} eq={state['equity']:.4f} "
-                  f"px={path.price:.8g} trend={state['trend']:+.2f} n={state['hawkes_n']:.2f} band={band}",
+            print(f"t+{int(n * POLL):>4}s {state['runtime_state']:<8} {state['position']:<8} "
+                  f"px={path.price:.8g} eq={state['equity']:.4f} pnl={state['pnl']:+.4f} "
+                  f"fees={state['fees_earned']:.5f} trend={state['trend']:+.2f} n={state['hawkes_n']:.2f}",
                   flush=True)
         else:
             try:
