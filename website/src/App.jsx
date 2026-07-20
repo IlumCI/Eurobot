@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import CountUp from './reactbits/CountUp.jsx';
 import DecryptedText from './reactbits/DecryptedText.jsx';
 import SplitText from './reactbits/SplitText.jsx';
-import Mark from './Mark.jsx';
+import Logo from './Logo.jsx';
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -107,10 +107,7 @@ export default function App() {
       {/* ---- masthead ---- */}
       <header className="masthead">
         <div className="masthead-left">
-          <span className="lockup">
-            <Mark size={30} className="mark" />
-            <span className="wordmark">Vältgeist</span>
-          </span>
+          <Logo height={42} className="site-logo" />
           <span className="doc-meta">AUTONOMOUS MARKET-MAKING PODS</span>
         </div>
         <nav className="masthead-nav">
@@ -383,10 +380,7 @@ delegation     scoped · revocable · yours`}</pre>
       <footer className="colophon">
         <div className="colophon-grid">
           <div>
-            <span className="lockup">
-              <Mark size={26} className="mark" />
-              <span className="wordmark">Vältgeist</span>
-            </span>
+            <Logo height={34} className="site-logo" />
             <p className="colophon-meta">
               A venture of the Euroswarms research institute. Built on the open Phoenix research —{' '}
               <a href="https://github.com/IlumCI/Eurobot" target="_blank" rel="noreferrer">

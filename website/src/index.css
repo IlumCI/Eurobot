@@ -79,23 +79,9 @@ a {
   flex-wrap: wrap;
 }
 
-.lockup {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.mark {
+.site-logo {
+  display: block;
   flex-shrink: 0;
-  translate: 0 -1px;
-}
-
-.wordmark {
-  font-family: 'Pirata One', 'Instrument Serif', serif;
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  font-size: 1.5rem;
-  line-height: 1;
 }
 
 .doc-meta {
