@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase, phantom, walletAddress } from './supabase.js';
+import { supabase, phantom, walletAddress, configError } from './supabase.js';
 
 const STATEMENT =
   'Sign in to Vältgeist. This proves you control this wallet. It authorizes no transaction and moves no funds.';
@@ -36,6 +36,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setReady(true);
@@ -67,6 +68,14 @@ export default function App() {
   const signOut = async () => {
     await supabase.auth.signOut();
   };
+
+  if (configError) {
+    return (
+      <div className="app">
+        <p className="error mono">{configError}</p>
+      </div>
+    );
+  }
 
   if (!ready) {
     return (
