@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import CountUp from './reactbits/CountUp.jsx';
 import DecryptedText from './reactbits/DecryptedText.jsx';
 import SplitText from './reactbits/SplitText.jsx';
+import Mark from './Mark.jsx';
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -68,7 +69,7 @@ const FAQS = [
     a: 'No. There is no pool. Your capital sits in your own wallet, trades from your own wallet, and never touches ours. We sell software and hosting — a pod — for a flat fee.',
   },
   {
-    q: 'Can Euroswarms withdraw my funds?',
+    q: 'Can Vältgeist withdraw my funds?',
     a: 'No — and not as a policy promise, as a construction. The pod trades through a scoped delegation that can open and close positions on whitelisted programs only. Transfers to any other address are structurally impossible. You can revoke the delegation in your wallet at any moment.',
   },
   {
@@ -106,7 +107,10 @@ export default function App() {
       {/* ---- masthead ---- */}
       <header className="masthead">
         <div className="masthead-left">
-          <span className="wordmark">EUROSWARMS</span>
+          <span className="lockup">
+            <Mark size={30} className="mark" />
+            <span className="wordmark">Vältgeist</span>
+          </span>
           <span className="doc-meta">AUTONOMOUS MARKET-MAKING PODS</span>
         </div>
         <nav className="masthead-nav">
@@ -117,7 +121,7 @@ export default function App() {
           <a href="#faq">FAQ</a>
         </nav>
         <div className="masthead-right">
-          <span className="doc-meta">DOC. ES-001 / REV A</span>
+          <span className="doc-meta">DOC. VG-001 / REV B</span>
           <button
             className="mode-toggle"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -134,7 +138,7 @@ export default function App() {
       <section className="hero">
         <div className="hero-copy">
           <SplitText
-            text="The machine is yours. The brain is shared."
+            text="Everything a hedge fund has. Except the fund."
             className="hero-title"
             tag="h1"
             splitType="words"
@@ -146,10 +150,10 @@ export default function App() {
           />
           <div className="hero-sub">
             <DecryptedText
-              text="Phoenix pods make markets on Solana from your own wallet — under a delegation that can trade but can never withdraw. What pods share is intelligence. Never capital."
+              text="The strategy research. The execution engine. The risk machinery. The live telemetry. Missing by design: the pool, the manager, the lockup, the 2-and-20. A prop desk of one, on Solana — trading your own capital, from your own wallet, under a delegation that can never withdraw."
               animateOn="view"
               sequential
-              speed={12}
+              speed={10}
               className="sub-plain"
               encryptedClassName="sub-encrypted"
             />
@@ -297,6 +301,7 @@ delegation     scoped · revocable · yours`}</pre>
       {/* ---- swarm ---- */}
       <section id="swarm" className="block">
         <RuleLabel num="03">The swarm — communal intelligence, never communal capital</RuleLabel>
+        <p className="lede">The machine is yours. The brain is shared.</p>
         <table className="ledger">
           <tbody>
             <tr>
@@ -333,21 +338,23 @@ delegation     scoped · revocable · yours`}</pre>
 
       {/* ---- terms ---- */}
       <section id="terms" className="block">
-        <RuleLabel num="04">Terms — a flat fee, never a cut</RuleLabel>
+        <RuleLabel num="04">Terms — two-and-twenty, struck</RuleLabel>
         <div className="terms">
           <div className="terms-price">
+            <span className="price-strike mono">2 &amp; 20</span>
             <span className="price-figure">€19</span>
-            <span className="price-per">per month, per pod</span>
+            <span className="price-per">per month, per pod — that is the entire fee schedule</span>
           </div>
           <div className="terms-body">
             <p>
-              One dedicated Phoenix pod, hosted and maintained. Full swarm membership. Live state, equity and
-              defense telemetry. Cancel or revoke at any moment.
+              A hedge fund charges two percent of your assets plus twenty percent of your gains — for the
+              privilege of holding your money. A pod costs nineteen euros: one dedicated Phoenix instance,
+              hosted and maintained, full swarm membership, live state, equity and defense telemetry. Cancel
+              or revoke at any moment.
             </p>
             <p className="terms-note">
-              We deliberately take no percentage of profits — your trading results are none of our business,
-              in the most literal sense. A fee tied to your returns would make us your manager. We are your
-              machinist.
+              We take no percentage of profits — your trading results are none of our business, in the most
+              literal sense. A fee tied to your returns would make us your manager. We are your machinist.
             </p>
             <a className="btn btn-solid" href="mailto:Europa@Euroswarms.eu?subject=Pod%20waitlist">
               REQUEST EARLY ACCESS →
@@ -376,9 +383,12 @@ delegation     scoped · revocable · yours`}</pre>
       <footer className="colophon">
         <div className="colophon-grid">
           <div>
-            <span className="wordmark">EUROSWARMS</span>
+            <span className="lockup">
+              <Mark size={26} className="mark" />
+              <span className="wordmark">Vältgeist</span>
+            </span>
             <p className="colophon-meta">
-              Built on the open Phoenix research —{' '}
+              A venture of the Euroswarms research institute. Built on the open Phoenix research —{' '}
               <a href="https://github.com/IlumCI/Eurobot" target="_blank" rel="noreferrer">
                 repository
               </a>
@@ -387,11 +397,12 @@ delegation     scoped · revocable · yours`}</pre>
             </p>
           </div>
           <p className="colophon-legal">
-            Euroswarms provides software and hosting. It does not provide investment advice, portfolio
-            management, or custody of client assets. You deploy, configure and control your own pod, and you
-            can revoke its authority at any time. Automated trading of volatile crypto-assets carries a risk
-            of total loss — use only capital whose loss would not matter to you. Nothing on this page is a
-            promise of returns.
+            Vältgeist provides software and hosting. It does not provide investment advice, portfolio
+            management, or custody of client assets. It is not a hedge fund, and it does not operate one for
+            you: there is no pooled vehicle, no manager, and no client money — you deploy, configure and
+            control your own pod, trading your own capital, and you can revoke its authority at any time.
+            Automated trading of volatile crypto-assets carries a risk of total loss — use only capital whose
+            loss would not matter to you. Nothing on this page is a promise of returns.
           </p>
         </div>
       </footer>

@@ -3,6 +3,7 @@
 @import '@fontsource/ibm-plex-mono/400.css';
 @import '@fontsource/ibm-plex-mono/500.css';
 @import '@fontsource/ibm-plex-mono/600.css';
+@import '@fontsource/pirata-one/400.css';
 
 :root {
   --paper: #f4f1ea;
@@ -78,10 +79,23 @@ a {
   flex-wrap: wrap;
 }
 
+.lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mark {
+  flex-shrink: 0;
+  translate: 0 -1px;
+}
+
 .wordmark {
-  font-weight: 600;
-  letter-spacing: 0.28em;
-  font-size: 0.95rem;
+  font-family: 'Pirata One', 'Instrument Serif', serif;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  font-size: 1.5rem;
+  line-height: 1;
 }
 
 .doc-meta {
@@ -493,6 +507,17 @@ a {
 .terms-price {
   border-top: 2px solid var(--ink);
   padding-top: 1rem;
+}
+
+.price-strike {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--ink-35);
+  text-decoration: line-through;
+  text-decoration-color: var(--signal);
+  text-decoration-thickness: 3px;
+  margin-bottom: 0.4rem;
 }
 
 .price-figure {
