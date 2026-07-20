@@ -400,7 +400,7 @@ delegation     scoped · revocable · yours`}</pre>
                 repository
               </a>
               {' '}·{' '}
-              <a href="mailto:europa@valtgeist.trade">europa@valtgeist.trade</a>
+              <a href="mailto:valtgeist@euroswarms.eu">valtgeist@euroswarms.eu</a>
             </p>
           </div>
           <p className="colophon-legal">

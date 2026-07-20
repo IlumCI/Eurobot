@@ -13,8 +13,8 @@ Canonical domain: **valtgeist.trade** (set in the `<link rel="canonical">` and O
 - **Cloudflare Pages / Netlify**: ignore `CNAME`; set the custom domain in the dashboard instead.
 - Point `valtgeist.trade` (and any defensive domains like `.com`) DNS at the host; redirect the
   rest to the canonical.
-- Contact address is `europa@valtgeist.trade` — **create that mailbox (or a forward to the
-  Euroswarms inbox) before launch**, or the waitlist mailto-fallback and colophon link will bounce.
+- Contact address is `valtgeist@euroswarms.eu` (routed through the parent Euroswarms domain;
+  set it up as a mailbox or alias there). No mail is stood up on `valtgeist.trade` itself.
 - Social share image is `public/og.png` (1200×630); regenerate from the brand if the tagline changes.
 
 ## Waitlist capture
@@ -33,7 +33,7 @@ The pre-registration form (`src/Waitlist.jsx`) POSTs JSON to the endpoint in the
    with an `email` field works the same way (Web3Forms, Basin, your own endpoint later).
 
 **With no endpoint configured** the form falls back to opening a prefilled mail compose to
-Europa@Euroswarms.eu — it degrades, it never dead-ends.
+valtgeist@euroswarms.eu — it degrades, it never dead-ends.
 
 The form ships with a honeypot field (`_gotcha`) and an explicit GDPR consent checkbox; the
 consent copy promises single-purpose use and easy withdrawal — honor it.
