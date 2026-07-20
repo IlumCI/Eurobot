@@ -121,3 +121,121 @@ body {
 a {
   color: var(--signal);
 }
+
+/* ---- signed-in / pod config ---- */
+.panel.signed {
+  align-items: stretch;
+  gap: 1.6rem;
+}
+.idrow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.idrow .addr {
+  font-size: clamp(1.3rem, 4vw, 1.9rem);
+}
+.podform {
+  display: flex;
+  flex-direction: column;
+  gap: 1.3rem;
+  border-top: 1px solid var(--hair);
+  padding-top: 1.6rem;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.field label {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.field input,
+.field select {
+  background: transparent;
+  border: 1px solid var(--hair);
+  color: var(--ink);
+  font-size: 0.95rem;
+  padding: 0.7rem 0.9rem;
+  outline: none;
+  font-family: inherit;
+  width: 100%;
+}
+.field input:focus,
+.field select:focus {
+  border-color: var(--signal);
+}
+.field select option {
+  background: var(--paper);
+}
+.hint {
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+.hint.bad {
+  color: var(--signal);
+}
+.hint.ok {
+  color: var(--ink);
+}
+.risk-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.risk {
+  flex: 1;
+  min-width: 96px;
+  background: transparent;
+  border: 1px solid var(--hair);
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  padding: 0.6rem 0.5rem;
+  cursor: pointer;
+}
+.risk.on {
+  border-color: var(--signal);
+  color: var(--ink);
+}
+.toggle {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  font-size: 0.85rem;
+  color: var(--dim);
+  line-height: 1.6;
+  cursor: pointer;
+}
+.toggle input {
+  margin-top: 0.25rem;
+  accent-color: var(--signal);
+}
+.guards {
+  font-size: 0.78rem;
+  line-height: 1.6;
+  border-left: 2px solid var(--hair);
+  padding-left: 0.9rem;
+}
+.podform-foot {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* "None" risk = the deadpan joke: grey out everything except the risk selector. */
+.podform.dimmed .field:not(.risk-field),
+.podform.dimmed .toggle,
+.podform.dimmed .guards,
+.podform.dimmed .podform-foot {
+  opacity: 0.25;
+  pointer-events: none;
+  filter: grayscale(1);
+  transition: opacity 0.25s ease;
+}

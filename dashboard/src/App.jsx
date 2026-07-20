@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase, phantom, walletAddress, configError } from './supabase.js';
+import PodConfig from './PodConfig.jsx';
 
 // SIWS requires an ASCII-only statement — the non-ASCII "ä" makes Phantom reject the
 // message as "invalid formatting", so the wallet display name here is plain ASCII.
@@ -86,19 +87,17 @@ export default function App() {
       </header>
 
       {session ? (
-        <main className="panel">
-          <p className="kicker mono">SIGNED IN</p>
-          <h1 className="addr mono">{short(address) || 'wallet connected'}</h1>
-          <p className="dim">
-            You're authenticated by wallet signature — no password, and Vältgeist never held a key to
-            get here. Your pod, config, and telemetry will live in this dashboard next.
-          </p>
-          <div className="row">
-            <span className="tag mono">status: no active subscription</span>
+        <main className="panel signed">
+          <div className="idrow">
+            <div>
+              <p className="kicker mono">YOUR POD</p>
+              <h1 className="addr mono">{short(address) || 'wallet connected'}</h1>
+            </div>
+            <button className="btn ghost" onClick={signOut}>
+              SIGN OUT
+            </button>
           </div>
-          <button className="btn ghost" onClick={signOut}>
-            SIGN OUT
-          </button>
+          <PodConfig />
         </main>
       ) : (
         <main className="panel">
