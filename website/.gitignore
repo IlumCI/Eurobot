@@ -2,7 +2,6 @@ node_modules/
 dist/
 shot-*.png
 
-# local env
+# local env (.env.production holds public build config like the waitlist endpoint — committed)
 .env
-.env.production
 .env.local
