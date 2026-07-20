@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase, phantom, walletAddress, configError } from './supabase.js';
 import PodConfig from './PodConfig.jsx';
+import PodTelemetry from './PodTelemetry.jsx';
 
 // SIWS requires an ASCII-only statement — the non-ASCII "ä" makes Phantom reject the
 // message as "invalid formatting", so the wallet display name here is plain ASCII.
@@ -97,6 +98,7 @@ export default function App() {
               SIGN OUT
             </button>
           </div>
+          <PodTelemetry />
           <PodConfig />
         </main>
       ) : (

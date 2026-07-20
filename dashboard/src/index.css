@@ -239,3 +239,53 @@ a {
   filter: grayscale(1);
   transition: opacity 0.25s ease;
 }
+
+/* ---- live pod telemetry ---- */
+.telem {
+  border: 1px solid var(--hair);
+  font-size: 0.82rem;
+}
+.telem.empty {
+  padding: 1rem 1.1rem;
+  color: var(--dim);
+  line-height: 1.6;
+}
+.telem-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--hair);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+}
+.live {
+  color: var(--signal);
+}
+.telem-body {
+  padding: 0.9rem 0.9rem;
+  overflow-x: auto;
+}
+.telem-row {
+  display: flex;
+  gap: 1rem;
+  line-height: 1.85;
+  white-space: nowrap;
+}
+.telem-k {
+  width: 6rem;
+  color: var(--dim);
+}
+.telem-v {
+  color: var(--ink);
+}
+.telem-note {
+  color: var(--dim);
+}
+.telem-foot {
+  padding: 0.5rem 0.9rem;
+  border-top: 1px solid var(--hair);
+  font-size: 0.68rem;
+  color: var(--dim);
+}
