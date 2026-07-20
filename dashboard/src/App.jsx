@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, phantom, walletAddress, configError } from './supabase.js';
 
+// SIWS requires an ASCII-only statement — the non-ASCII "ä" makes Phantom reject the
+// message as "invalid formatting", so the wallet display name here is plain ASCII.
 const STATEMENT =
-  'Sign in to Vältgeist. This proves you control this wallet. It authorizes no transaction and moves no funds.';
+  'Sign in to Valtgeist. This proves you control this wallet. It authorizes no transaction and moves no funds.';
 
 // Try the Wallet-Standard auto-detect first (works for any standard Solana wallet),
 // then fall back to the explicit Phantom provider object.
