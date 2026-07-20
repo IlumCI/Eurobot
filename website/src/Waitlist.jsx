@@ -7,7 +7,7 @@ import { useState } from 'react';
  * form never dead-ends. Honeypot field for bots; explicit GDPR consent.
  */
 const ENDPOINT = import.meta.env.VITE_WAITLIST_ENDPOINT || '';
-const CONTACT = 'Europa@Euroswarms.eu';
+const CONTACT = 'europa@valtgeist.trade';
 
 export default function Waitlist() {
   const [email, setEmail] = useState('');

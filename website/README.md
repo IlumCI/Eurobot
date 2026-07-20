@@ -3,6 +3,20 @@
 Vite + React one-pager. `npm install && npm run dev` to work on it, `npm run build` for the
 deployable `dist/` (any static host: Cloudflare Pages, Netlify, GitHub Pages).
 
+## Domain & deploy
+
+Canonical domain: **valtgeist.trade** (set in the `<link rel="canonical">` and OG/Twitter meta in
+`index.html`, and in `public/CNAME`).
+
+- **GitHub Pages**: `public/CNAME` is copied to `dist/` on build and points Pages at the domain;
+  add the DNS records GitHub shows you (A/AAAA for apex, or CNAME for a `www`/subdomain).
+- **Cloudflare Pages / Netlify**: ignore `CNAME`; set the custom domain in the dashboard instead.
+- Point `valtgeist.trade` (and any defensive domains like `.com`) DNS at the host; redirect the
+  rest to the canonical.
+- Contact address is `europa@valtgeist.trade` — **create that mailbox (or a forward to the
+  Euroswarms inbox) before launch**, or the waitlist mailto-fallback and colophon link will bounce.
+- Social share image is `public/og.png` (1200×630); regenerate from the brand if the tagline changes.
+
 ## Waitlist capture
 
 The pre-registration form (`src/Waitlist.jsx`) POSTs JSON to the endpoint in the

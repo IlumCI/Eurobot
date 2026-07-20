@@ -398,7 +398,7 @@ delegation     scoped · revocable · yours`}</pre>
                 repository
               </a>
               {' '}·{' '}
-              <a href="mailto:Europa@Euroswarms.eu">Europa@Euroswarms.eu</a>
+              <a href="mailto:europa@valtgeist.trade">europa@valtgeist.trade</a>
             </p>
           </div>
           <p className="colophon-legal">
