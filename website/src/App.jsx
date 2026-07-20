@@ -4,6 +4,7 @@ import CountUp from './reactbits/CountUp.jsx';
 import DecryptedText from './reactbits/DecryptedText.jsx';
 import SplitText from './reactbits/SplitText.jsx';
 import Logo from './Logo.jsx';
+import Waitlist from './Waitlist.jsx';
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -156,7 +157,7 @@ export default function App() {
             />
           </div>
           <div className="hero-actions">
-            <a className="btn btn-solid" href="mailto:Europa@Euroswarms.eu?subject=Pod%20waitlist">
+            <a className="btn btn-solid" href="#waitlist">
               REQUEST A POD →
             </a>
             <a className="btn" href="https://github.com/IlumCI/Eurobot" target="_blank" rel="noreferrer">
@@ -353,16 +354,26 @@ delegation     scoped · revocable · yours`}</pre>
               We take no percentage of profits — your trading results are none of our business, in the most
               literal sense. A fee tied to your returns would make us your manager. We are your machinist.
             </p>
-            <a className="btn btn-solid" href="mailto:Europa@Euroswarms.eu?subject=Pod%20waitlist">
+            <a className="btn btn-solid" href="#waitlist">
               REQUEST EARLY ACCESS →
             </a>
           </div>
         </div>
       </section>
 
+      {/* ---- waitlist ---- */}
+      <section id="waitlist" className="block">
+        <RuleLabel num="05">Pre-registration — form VG-W1</RuleLabel>
+        <p className="lede">
+          Pods open in small batches — the strategy's edge lives in thin pools, so the fleet grows at the
+          pace the venues can carry. The waitlist is first-come: one address, no payment, no obligation.
+        </p>
+        <Waitlist />
+      </section>
+
       {/* ---- faq ---- */}
       <section id="faq" className="block">
-        <RuleLabel num="05">Appendix — the questions that matter</RuleLabel>
+        <RuleLabel num="06">Appendix — the questions that matter</RuleLabel>
         <div className="faq">
           {FAQS.map((f, i) => (
             <details key={f.q}>

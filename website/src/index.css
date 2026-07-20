@@ -537,6 +537,83 @@ a {
   margin-top: 1.8rem;
 }
 
+/* ---- waitlist ---- */
+.waitlist {
+  max-width: 640px;
+}
+
+.waitlist-row {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.waitlist-input {
+  flex: 1;
+  min-width: 240px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  font-size: 0.9rem;
+  padding: 0.8rem 1rem;
+  outline: none;
+}
+
+.waitlist-input:focus {
+  border-color: var(--signal);
+}
+
+.waitlist-input::placeholder {
+  color: var(--ink-35);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.waitlist-gotcha {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.waitlist-consent {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  margin-top: 1.1rem;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: var(--ink-60);
+  cursor: pointer;
+}
+
+.waitlist-consent input {
+  margin-top: 0.25rem;
+  accent-color: var(--signal);
+}
+
+.waitlist-done {
+  border: 1px solid var(--ink);
+  padding: 1.1rem 1.3rem;
+  max-width: 640px;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+.waitlist-error {
+  margin-top: 0.9rem;
+  font-size: 0.8rem;
+  color: var(--signal);
+}
+
+.waitlist-error a {
+  color: var(--signal);
+}
+
 /* ---- faq ---- */
 .faq {
   max-width: 760px;

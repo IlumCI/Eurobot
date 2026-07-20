@@ -1,3 +1,8 @@
 node_modules/
 dist/
 shot-*.png
+
+# local env
+.env
+.env.production
+.env.local
