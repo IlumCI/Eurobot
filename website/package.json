@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seo": "node scripts/gen-index.mjs",
+    "prebuild": "node scripts/gen-index.mjs",
+    "postbuild": "node scripts/prerender.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",

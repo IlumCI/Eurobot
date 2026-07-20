@@ -95,7 +95,7 @@ function RuleLabel({ num, children }) {
   return (
     <div className="rule-label">
       <span className="rule-num">§{num}</span>
-      <span className="rule-text">{children}</span>
+      <h2 className="rule-text">{children}</h2>
       <span className="rule-line" />
     </div>
   );

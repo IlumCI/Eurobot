@@ -3,29 +3,168 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Vältgeist — everything a hedge fund has, except the fund. Autonomous market-making pods for Solana: your capital, your wallet, a prop desk of one." />
+
     <title>Vältgeist — Everything a hedge fund has. Except the fund.</title>
-    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="description" content="Vältgeist runs autonomous market-making pods on Solana from a vault only you can withdraw from — a prop desk of one. Everything a hedge fund has, except the fund: no pool, no manager, no lockup, no 2-and-20. A flat €19/month." />
+    <meta name="keywords" content="Solana market making, CLMM liquidity bot, non-custodial trading bot, prop desk, Meteora DLMM, automated liquidity provision, Solana DeFi, Vältgeist, Phoenix pod, delegated trading, flat-fee trading software" />
+    <meta name="author" content="Vältgeist" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#121310" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)" />
     <link rel="canonical" href="https://valtgeist.trade/" />
-    <meta name="theme-color" content="#121310" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/favicon.png" color="#e8490f" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vältgeist" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:url" content="https://valtgeist.trade/" />
     <meta property="og:title" content="Vältgeist — Everything a hedge fund has. Except the fund." />
-    <meta property="og:description" content="Autonomous market-making pods for Solana. Your capital, your wallet, a prop desk of one — under a delegation that can trade but never withdraw." />
+    <meta property="og:description" content="Autonomous market-making pods for Solana. Your capital in a vault only you can withdraw from, under a delegation that can trade but never move funds out. A prop desk of one — flat €19/month, no cut of profits." />
     <meta property="og:image" content="https://valtgeist.trade/og.png" />
+    <meta property="og:image:secure_url" content="https://valtgeist.trade/og.png" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Vältgeist — Everything a hedge fund has. Except the fund. Autonomous market-making pods for Solana." />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@valtgeist" />
+    <meta name="twitter:creator" content="@valtgeist" />
     <meta name="twitter:title" content="Vältgeist — Everything a hedge fund has. Except the fund." />
-    <meta name="twitter:description" content="Autonomous market-making pods for Solana. Your capital, your wallet, a prop desk of one." />
+    <meta name="twitter:description" content="Autonomous market-making pods for Solana. Your capital in a vault only you can withdraw from, under a delegation that can trade but never move funds out. A prop desk of one — flat €19/month, no cut of profits." />
     <meta name="twitter:image" content="https://valtgeist.trade/og.png" />
+    <meta name="twitter:image:alt" content="Vältgeist — a prop desk of one on Solana. Flat €19/month, no cut of profits." />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "@id": "https://valtgeist.trade/#org",
+  "name": "Vältgeist",
+  "url": "https://valtgeist.trade",
+  "logo": "https://valtgeist.trade/favicon.png",
+  "description": "Autonomous market-making pod software for Solana. A venture of the Euroswarms research institute.",
+  "email": "valtgeist@euroswarms.eu",
+  "parentOrganization": {
+    "@type": "Organization",
+    "name": "Euroswarms",
+    "url": "https://euroswarms.eu"
+  },
+  "sameAs": [
+    "https://github.com/IlumCI/Eurobot"
+  ]
+}
+    </script>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "@id": "https://valtgeist.trade/#website",
+  "url": "https://valtgeist.trade",
+  "name": "Vältgeist",
+  "description": "Vältgeist runs autonomous market-making pods on Solana from a vault only you can withdraw from — a prop desk of one. Everything a hedge fund has, except the fund: no pool, no manager, no lockup, no 2-and-20. A flat €19/month.",
+  "publisher": {
+    "@id": "https://valtgeist.trade/#org"
+  },
+  "inLanguage": "en"
+}
+    </script>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Vältgeist Pod",
+  "applicationCategory": "FinanceApplication",
+  "operatingSystem": "Web, Solana",
+  "url": "https://valtgeist.trade",
+  "description": "A hosted instance of the Phoenix market-making engine that provides concentrated liquidity on Solana pools from a vault only you can withdraw from, under a scoped delegation that can trade but never withdraw.",
+  "publisher": {
+    "@id": "https://valtgeist.trade/#org"
+  },
+  "offers": {
+    "@type": "Offer",
+    "price": "19",
+    "priceCurrency": "EUR",
+    "description": "One dedicated pod, hosted and maintained. Flat monthly fee, no share of profits.",
+    "url": "https://valtgeist.trade/#waitlist"
+  }
+}
+    </script>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is this a fund? Do you pool money?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. There is no pool — your capital is never commingled with anyone else’s, or with ours. It sits in a vault that only you can withdraw from; Vältgeist never takes custody of it. We sell software and hosting — a pod — for a flat fee."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can Vältgeist withdraw my funds?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No — and not as a policy promise, as a construction. Your funds sit in a vault only you can withdraw from. The pod holds an operator key authorized for exactly one action — rebalancing your liquidity on whitelisted programs — and structurally unable to transfer funds to any other address. Only you can withdraw. Revoke the pod’s key any time with a signature from your wallet."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What returns should I expect?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "We make no return promises, and you should distrust anyone who does. This is experimental market making on volatile assets. You can lose money — every defense in the machine exists precisely because losses are real. Fund a pod only with capital whose loss would not matter to you."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What do other users get from my pod?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Intelligence, never money. Your pod contributes anonymized signals — cascade alarms, blacklist entries, pool crowding data — to the swarm, and receives the same from every other pod. Profits and losses stay strictly yours."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I stop?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Revoke the delegation in your wallet: the pod loses all authority instantly, no support ticket required. Cancel the subscription whenever you like."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is the strategy public?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The research behind it is — the verified strategy catalog and the simulation harness live in the open repository. The pod runtime and the swarm layer are proprietary."
+      }
+    }
+  ]
+}
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>Vältgeist — Everything a hedge fund has. Except the fund.</h1>
+      <p>Autonomous market-making pods for Solana. Your capital in a vault only you can withdraw from, under a delegation that can trade but never move funds out. A prop desk of one — flat €19/month, no cut of profits.</p>
+      <p>Vältgeist runs autonomous market-making pods on Solana. Your capital sits in a vault only you can
+        withdraw from; the pod is authorized to rebalance your liquidity on whitelisted programs and is
+        structurally unable to move funds out. A prop desk of one — flat €19 per month, no cut of profits,
+        no pool, no manager. Contact: valtgeist@euroswarms.eu</p>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
