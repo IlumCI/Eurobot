@@ -111,6 +111,57 @@ walled off — on your terms, with your keys.
 
 ---
 
+## Aggressive version — using the big number safely
+
+You don't have to be tame. You can use the shocking hedge-fund number and sell hard.
+The only rule: **point the number at the hedge fund (true), never at the user's
+wallet (a promise).** The number is the locked room; your product is the key to the
+door. That's the whole move.
+
+There is exactly **one sentence you cannot write**: a quantified or guaranteed promise
+of *the user's* return ("you'll earn $X", "guaranteed", "make millions"). That single
+claim is what flips you from non-custodial software (safe) to investment scheme
+(Howey) and is the FTC's most-enforced marketing category. Everything short of it is
+fair game. Go hard.
+
+**Aggressive but safe — these all use the dream and the number:**
+
+- > The average hedge fund clears millions a month running strategies you're legally
+  > banned from touching. We took the machinery out of the vault and bolted it to your
+  > wallet.
+
+- > There's a room where the money is made. You were never getting in. So we knocked a
+  > hole in the wall and ran a cable to your phone.
+
+- > Hedge funds pull seven figures a month and make sure people like you can't play.
+  > Vältgeist doesn't ask your net worth. It asks your wallet address.
+
+- > They charge a million-dollar entry fee to run a bot. We charge a subscription and
+  > let you keep the keys. Same class of machine. Opposite side of the rope.
+
+- > Wall Street's best-kept secret isn't the strategy. It's the $1M door. **The door
+  > is gone.**
+
+**Why these are safe:** every "millions a month" / "seven figures" is a statement
+about *hedge funds*, which is true. None of them says *you* will earn it. The
+aspiration is carried by *access* ("now it's on your wallet"), which is real. You get
+95% of the emotional hit of "you can earn $3.66M" with 0% of the legal exposure.
+
+**The line, drawn once:**
+
+| ✅ Sell this hard | ❌ Never write this |
+|---|---|
+| "Hedge funds make millions a month" (about them) | "You'll make millions a month" (about the user) |
+| "Strategies you were locked out of — now on your wallet" | "Earn hedge-fund returns" |
+| "The $1M door is gone" | "Guaranteed / risk-free / X% returns" |
+| Big numbers about the *industry* | Any number attached to *their* pod |
+
+If a line makes a factual claim about *hedge funds* or *access*, ship it. If it
+promises *the reader* a *number* or a *guarantee*, kill it. That's the entire
+rulebook — everything else, be as loud and dream-selling as you like.
+
+---
+
 ## The safe way to use hedge-fund *facts*
 
 These are factual barriers, not return claims — safe to cite (keep them roughly
