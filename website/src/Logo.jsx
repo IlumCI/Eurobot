@@ -1,36 +1,37 @@
 /**
- * The Vältgeist logotype: the winged V is the letter.
- * Tall winged left limb with a hooked raptor head; the right limb falls to
- * lowercase x-height and flows into "ältgeist" (Pirata One); an underline
- * sweeps beneath the word. Draws in currentColor.
+ * The Vältgeist logotype — variant B, all Tinos (Times) Bold.
+ * The capital V carries a stepped aquila wing: five square tiers, even
+ * stairs, the top tier flush with the cap's serif so the pedestal reads
+ * as the first feather; lower tiers seat into the stem's measured slope.
+ * One SVG, one baseline, underline sweeping beneath the word.
+ * Draws in currentColor.
  */
 export default function Logo({ height = 40, className = '' }) {
-  const width = Math.round((height * 420) / 126);
+  const width = Math.round((height * 1260) / 330);
   return (
     <svg
       className={className}
       width={width}
       height={height}
-      viewBox="0 0 420 126"
+      viewBox="60 210 1260 330"
       fill="currentColor"
       role="img"
       aria-label="Vältgeist"
     >
       <title>Vältgeist</title>
-      {/* asymmetric V: tall winged left limb, right limb at x-height */}
-      <polygon points="26,18 48,18 63,80 76,58 96,58 68,112 58,112" />
-      {/* raptor head, fused, hooked beak facing left */}
-      <polygon points="48,18 48,2 35,1 22,7 34,10 28,15 38,16 42,22" />
-      {/* wing: three gapped blade feathers */}
-      <polygon points="33,42 36,50 4,32 1,26" />
-      <polygon points="40,61 43,69 13,53 10,47" />
-      <polygon points="47,80 50,88 22,74 19,68" />
-      {/* wordmark */}
-      <text x="97" y="112" fontFamily="'Pirata One', serif" fontSize="76">
+      <text x="300" y="500" fontFamily="Tinos, 'Times New Roman', serif" fontWeight="700" fontSize="400">
+        V
+      </text>
+      {/* wing: five even stairs, top tier flush with the cap serif */}
+      <polygon points="105,240 392,240 392,266 105,266" />
+      <polygon points="147,280 397,280 397,306 147,306" />
+      <polygon points="189,320 415,320 415,346 189,346" />
+      <polygon points="231,360 432,360 432,386 231,386" />
+      <polygon points="273,400 450,400 450,426 273,426" />
+      <text x="516" y="500" fontFamily="Tinos, 'Times New Roman', serif" fontWeight="700" fontSize="240">
         ältgeist
       </text>
-      {/* underline sweeping beneath the word */}
-      <polygon points="74,120 404,120 410,114 80,114" />
+      <polygon points="410,522 1284,522 1296,510 422,510" />
     </svg>
   );
 }
