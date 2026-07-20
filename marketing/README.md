@@ -43,6 +43,7 @@ Everything else is optional polish.
 | `messaging.md` | The words: one-liner, pitches, who to target, objection answers. Read this first — it feeds everything else. |
 | `copy-bank.md` | Paste-ready posts: X bio, launch thread, standalone tweets, a Reddit post, waitlist email, taglines. |
 | `compliance-guardrails.md` | The DO/DON'T language rules for a financial product. **Read before posting.** |
+| `hedge-fund-angle.md` | The "hedge-fund machinery, without the fund" campaign — access-not-returns, with a killer contrast table and ready copy. |
 
 ## A simple first-week sequence (don't overthink it)
 
