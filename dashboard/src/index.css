@@ -1,0 +1,123 @@
+:root {
+  --paper: #121310;
+  --ink: #e6e1d4;
+  --dim: rgba(230, 225, 212, 0.6);
+  --hair: rgba(230, 225, 212, 0.16);
+  --signal: #ff5a1f;
+}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.mono {
+  font-family: ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+.dim {
+  color: var(--dim);
+}
+.small {
+  font-size: 0.8rem;
+}
+.app {
+  min-height: 100vh;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.4rem clamp(1.2rem, 5vw, 3rem);
+}
+.bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 1.1rem;
+  border-bottom: 2px solid var(--ink);
+}
+.wordmark {
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  font-size: 0.95rem;
+}
+.doc {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+}
+.panel {
+  padding: clamp(3rem, 12vh, 6rem) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.1rem;
+}
+.kicker {
+  color: var(--signal);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+}
+.headline {
+  font-size: clamp(1.7rem, 5vw, 2.6rem);
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  max-width: 16ch;
+}
+.addr {
+  font-size: clamp(1.8rem, 6vw, 3rem);
+  letter-spacing: 0.02em;
+}
+.panel .dim {
+  max-width: 52ch;
+  line-height: 1.7;
+}
+.row {
+  display: flex;
+  gap: 0.6rem;
+}
+.tag {
+  border: 1px solid var(--hair);
+  padding: 0.4rem 0.8rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+.btn {
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+  padding: 0.85rem 1.5rem;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.btn.solid {
+  background: var(--ink);
+  color: var(--paper);
+}
+.btn.solid:hover:not(:disabled) {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: var(--paper);
+}
+.btn.ghost:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.error {
+  color: var(--signal);
+  font-size: 0.82rem;
+}
+a {
+  color: var(--signal);
+}
