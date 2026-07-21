@@ -29,7 +29,7 @@ everywhere. Anti-hype *is* the hype.
 
 1. **Claim the handles.** Create the X/Twitter account (and grab the name on
    Farcaster + Reddit). Use the bio in `copy-bank.md`. Pin the launch post.
-2. **Post the launch thread** from `copy-bank.md` (X). Cross-post the short version
+2. **Post the launch thread** from `voice-and-copy.md` (X). Cross-post the short version
    to r/solana-adjacent places and any Solana LP Discord you're in.
 3. **Email the waitlist** (even if it's 3 people) with the update template in
    `copy-bank.md`. Momentum compounds; a list you never talk to dies.
@@ -40,8 +40,9 @@ Everything else is optional polish.
 
 | File | What it's for |
 |------|---------------|
-| `messaging.md` | The words: one-liner, pitches, who to target, objection answers. Read this first — it feeds everything else. |
-| `copy-bank.md` | Paste-ready posts: X bio, launch thread, standalone tweets, a Reddit post, waitlist email, taglines. |
+| `voice-and-copy.md` | **Post from this one.** Copy written in *your* actual voice (@Euroswarms register) — lowercase, candid, edge aimed at gatekeepers. The others read like an AI wrote them; this doesn't. |
+| `messaging.md` | The words: one-liner, pitches, who to target, objection answers. Reference for *facts*, not voice. |
+| `copy-bank.md` | Paste-ready posts in the clean/safe register. Use as backup or when you want the tidy version. |
 | `compliance-guardrails.md` | The DO/DON'T language rules for a financial product. **Read before posting.** |
 | `hedge-fund-angle.md` | The "hedge-fund machinery, without the fund" campaign — access-not-returns, with a killer contrast table and ready copy. |
 
