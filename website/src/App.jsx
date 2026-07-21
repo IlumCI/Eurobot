@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import CountUp from './reactbits/CountUp.jsx';
-import DecryptedText from './reactbits/DecryptedText.jsx';
-import SplitText from './reactbits/SplitText.jsx';
 import Logo from './Logo.jsx';
 import Waitlist from './Waitlist.jsx';
 import CookieConsent from './CookieConsent.jsx';
@@ -21,9 +19,8 @@ function useTheme() {
   return [theme, setTheme];
 }
 
-// The gsap SplitText / motion animations re-run on every viewport resize, which mobile
-// browsers trigger constantly as the address bar hides on scroll — breaking the text.
-// Run them on desktop only; mobile gets the clean static (already-prerendered) content.
+// The hero now uses a pure-CSS fade-in (no gsap), so it's animated everywhere without the
+// mobile resize glitches. This flag only gates the CountUp odometer in the figures block.
 function useIsDesktop() {
   const [desktop, setDesktop] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(min-width: 768px)').matches : true);
@@ -37,7 +34,7 @@ function useIsDesktop() {
 }
 
 const HERO_SUB =
-  'The strategy research. The execution engine. The risk machinery. The live telemetry. Missing by design: the pool, the manager, the lockup, the 2-and-20. A prop desk of one, on Solana — trading your own capital from a vault only you can withdraw from, under a delegation that rebalances your liquidity but can never move funds out.';
+  'A hedge fund runs a market-making desk with pooled money, behind a seven-figure door. Vältgeist is that same desk, rebuilt to run on your own Solana wallet. Your capital stays in a vault only you can withdraw from, and the pod that trades it can rebalance your liquidity and nothing else — it can never move your funds out. One flat fee. We take no share of your profits.';
 
 const MECHANISMS = [
   {
@@ -157,36 +154,11 @@ export default function App() {
       {/* ---- hero ---- */}
       <section className="hero">
         <div className="hero-copy">
-          {isDesktop ? (
-            <SplitText
-              text="Everything a hedge fund has. Except the fund."
-              className="hero-title"
-              tag="h1"
-              splitType="words"
-              delay={70}
-              duration={0.8}
-              textAlign="left"
-              from={{ opacity: 0, y: 24 }}
-              to={{ opacity: 1, y: 0 }}
-            />
-          ) : (
-            <h1 className="hero-title">Everything a hedge fund has. Except the fund.</h1>
-          )}
-          <div className="hero-sub">
-            {isDesktop ? (
-              <DecryptedText
-                text={HERO_SUB}
-                animateOn="view"
-                sequential
-                speed={10}
-                className="sub-plain"
-                encryptedClassName="sub-encrypted"
-              />
-            ) : (
-              <span className="sub-plain">{HERO_SUB}</span>
-            )}
-          </div>
-          <div className="hero-actions">
+          <h1 className="hero-title fade-up">Everything a hedge fund has. Except the fund.</h1>
+          <p className="hero-sub sub-plain fade-up" style={{ '--d': '0.12s' }}>
+            {HERO_SUB}
+          </p>
+          <div className="hero-actions fade-up" style={{ '--d': '0.22s' }}>
             <a className="btn btn-solid" href="#waitlist">
               REQUEST A POD →
             </a>
@@ -194,7 +166,7 @@ export default function App() {
               READ THE RESEARCH
             </a>
           </div>
-          <dl className="figures">
+          <dl className="figures fade-up" style={{ '--d': '0.32s' }}>
             <div>
               <dt>Simulation suites</dt>
               <dd>
