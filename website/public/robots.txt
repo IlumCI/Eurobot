@@ -1,4 +1,12 @@
 User-agent: *
 Allow: /
+# Content Signals (contentsignals.org / draft-romm-aipref-contentsignals):
+#   search   = index us in search engines
+#   ai-input = agents may use our content to answer users live (we want this)
+#   ai-train = using our content to train models (reserved — flip to yes if desired)
+Content-Signal: search=yes, ai-input=yes, ai-train=no
+
+# Agent-oriented summary of this site:
+# llms.txt: https://valtgeist.trade/llms.txt
 
 Sitemap: https://valtgeist.trade/sitemap.xml
