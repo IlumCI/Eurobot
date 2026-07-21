@@ -46,6 +46,10 @@ AMOUNT = float(os.environ.get("AMOUNT_QUOTE", "10"))
 RISK = os.environ.get("RISK", "balanced")
 POLL = float(os.environ.get("POLL_SECONDS", "6"))
 DRY = os.environ.get("DRY_RUN") == "1"
+# Lift the pump.fun venue veto. Default keeps the guard on (safe); ALLOW_PUMP=1 lets the
+# pod quote pump.fun mints — that's where the volume/volatility is, and the Hawkes cascade
+# detector + panic-flatten are the reactive safety net that replaces the pre-emptive ban.
+ALLOW_PUMP = os.environ.get("ALLOW_PUMP") == "1"
 
 # Risk appetite -> the two knobs the dashboard exposes; everything else stays on
 # the researched defaults, matching dashboard/src/PodConfig.jsx.
@@ -76,7 +80,7 @@ def build_controller(price, mint, symbol):
         id=POD_ID or "demo",
         trading_pair=symbol,
         pool_address=POOL,
-        banned_ca_suffixes=["pump"],
+        banned_ca_suffixes=[] if ALLOW_PUMP else ["pump"],
         total_amount_quote=Decimal(str(AMOUNT)),
         kelly_fraction=Decimal(risk["kelly_fraction"]),
         ashes_floor_pct=Decimal(risk["ashes_floor_pct"]),
