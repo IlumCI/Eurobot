@@ -1,13 +1,13 @@
 import { useState } from 'react';
+import { postWaitlist, WAITLIST_ENDPOINT as ENDPOINT, WAITLIST_CONTACT as CONTACT } from './submitWaitlist.js';
 
 /**
  * Pre-registration form. POSTs JSON to a Formspree-style endpoint set via
  * VITE_WAITLIST_ENDPOINT (e.g. https://formspree.io/f/xxxxxxx). With no
  * endpoint configured it falls back to a prefilled mail compose, so the
  * form never dead-ends. Honeypot field for bots; explicit GDPR consent.
+ * The network POST is shared with the WebMCP agent tool via submitWaitlist.js.
  */
-const ENDPOINT = import.meta.env.VITE_WAITLIST_ENDPOINT || '';
-const CONTACT = 'valtgeist@euroswarms.eu';
 
 export default function Waitlist() {
   const [email, setEmail] = useState('');
@@ -30,16 +30,8 @@ export default function Waitlist() {
       return;
     }
     setState('sending');
-    try {
-      const res = await fetch(ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ email, source: 'valtgeist-site', consent: true }),
-      });
-      setState(res.ok ? 'done' : 'error');
-    } catch {
-      setState('error');
-    }
+    const { ok } = await postWaitlist(email, { source: 'valtgeist-site' });
+    setState(ok ? 'done' : 'error');
   }
 
   if (state === 'done') {

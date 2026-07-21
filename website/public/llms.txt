@@ -67,6 +67,18 @@ and structurally the owner's.
 - Open research: the verified strategy catalog and simulation harness are public in the
   repository. The pod runtime and swarm layer are proprietary.
 
+## Agent tools (WebMCP)
+
+If you are an in-browser agent whose browser supports WebMCP
+(navigator.modelContext), this site registers tools on page load at
+https://valtgeist.trade/ :
+
+- `valtgeist_get_facts` — structured facts about the product.
+- `valtgeist_get_pricing` — the flat per-pod subscription and hedge-fund contrast.
+- `valtgeist_get_status` — current launch status.
+- `valtgeist_join_waitlist({ email })` — register a user's email on the waitlist
+  (call only when the user has explicitly asked to join; consent per the Privacy Policy).
+
 ## Links
 
 - [Website](https://valtgeist.trade/): product overview, custody model, FAQ, waitlist.
