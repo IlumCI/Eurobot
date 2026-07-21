@@ -22,6 +22,33 @@ function short(addr) {
   return addr ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : '';
 }
 
+// Standalone demo view — no wallet, no Supabase, no funds. Reachable at ?demo=1 so it can
+// be linked/screenshotted; it renders the exact dashboard against a simulated stream.
+function DemoView() {
+  return (
+    <div className="app">
+      <header className="bar">
+        <span className="wordmark">VÄLTGEIST</span>
+        <span className="mono dim doc">DASHBOARD · DEMO</span>
+      </header>
+      <main className="panel signed">
+        <div className="demo-banner">
+          <strong>This is a live demo.</strong> Simulated data — no wallet, no funds, nothing at risk. It
+          shows how your dashboard looks while a pod runs. <a href="https://valtgeist.trade">Join the waitlist →</a>
+        </div>
+        <div className="idrow">
+          <div>
+            <p className="kicker mono">DEMO POD</p>
+            <h1 className="addr mono">SOL-USDT</h1>
+          </div>
+          <a className="btn ghost" href="?">EXIT DEMO</a>
+        </div>
+        <PodTelemetry demo />
+      </main>
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
@@ -63,6 +90,11 @@ export default function App() {
   const signOut = async () => {
     await supabase.auth.signOut();
   };
+
+  // Demo bypasses auth + Supabase entirely, so it works with no wallet and no env.
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('demo')) {
+    return <DemoView />;
+  }
 
   if (configError) {
     return (
@@ -109,9 +141,12 @@ export default function App() {
             Sign in with Solana — you'll sign a message proving you control the wallet. It authorizes no
             transaction and moves no funds. That signature is your entire login.
           </p>
-          <button className="btn solid" onClick={connect} disabled={busy}>
-            {busy ? 'CHECK YOUR WALLET…' : 'CONNECT WALLET →'}
-          </button>
+          <div className="cta-row">
+            <button className="btn solid" onClick={connect} disabled={busy}>
+              {busy ? 'CHECK YOUR WALLET…' : 'CONNECT WALLET →'}
+            </button>
+            <a className="btn ghost" href="?demo=1">▶ WATCH A LIVE DEMO</a>
+          </div>
           {error && <p className="error mono">{error}</p>}
           <p className="dim small">
             No account, no password. New here? <a href="https://valtgeist.trade">valtgeist.trade</a>

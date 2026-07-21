@@ -1,9 +1,14 @@
 :root {
   --paper: #121310;
+  --card: #191b16;
   --ink: #e6e1d4;
   --dim: rgba(230, 225, 212, 0.6);
   --hair: rgba(230, 225, 212, 0.16);
   --signal: #ff5a1f;
+  /* status colours — reserved, always paired with a word + icon, never colour alone */
+  --up: #34d39a;
+  --down: #ff5c5c;
+  --warn: #f5b544;
 }
 * {
   margin: 0;
@@ -299,4 +304,224 @@ a {
   border-top: 1px solid var(--hair);
   font-size: 0.68rem;
   color: var(--dim);
+}
+
+/* ============================================================
+   Human-first pod dashboard
+   ============================================================ */
+.cta-row {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin-top: 1.4rem;
+}
+
+.demo-banner {
+  border: 1px solid var(--hair);
+  border-left: 3px solid var(--signal);
+  background: var(--card);
+  padding: 0.8rem 1rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--dim);
+  margin-bottom: 1.4rem;
+}
+.demo-banner strong { color: var(--ink); }
+.demo-banner a { color: var(--signal); text-decoration: none; white-space: nowrap; }
+
+.tel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin: 1.4rem 0;
+}
+.tel-empty {
+  border: 1px solid var(--hair);
+  background: var(--card);
+  padding: 1.1rem 1.2rem;
+  color: var(--dim);
+  line-height: 1.6;
+  margin: 1.4rem 0;
+}
+
+/* 1 — status pill */
+.tel-status {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  border: 1px solid var(--hair);
+  background: var(--card);
+  padding: 0.85rem 1rem;
+}
+.tel-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--dim);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.04);
+}
+.tel-status-txt { display: flex; flex-direction: column; line-height: 1.3; }
+.tel-status-txt strong { font-size: 1.02rem; letter-spacing: -0.01em; }
+.tel-status-txt span { font-size: 0.85rem; color: var(--dim); }
+.tel-demo {
+  margin-left: auto;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  color: var(--signal);
+  border: 1px solid var(--signal);
+  padding: 0.25rem 0.5rem;
+}
+.tone-go .tel-dot { background: var(--up); box-shadow: 0 0 0 4px rgba(52, 211, 154, 0.16); }
+.tone-warn .tel-dot { background: var(--warn); box-shadow: 0 0 0 4px rgba(245, 181, 68, 0.16); }
+.tone-stop .tel-dot { background: var(--down); box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.16); }
+.tone-wait .tel-dot { background: var(--ink); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.4; } }
+
+/* 2 — money hero */
+.tel-hero {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 1rem;
+  border: 1px solid var(--hair);
+  background: var(--card);
+  padding: 1.3rem 1.4rem;
+}
+.tel-hero-main { display: flex; flex-direction: column; gap: 0.35rem; }
+.tel-hero-label { font-size: 0.82rem; color: var(--dim); }
+.tel-hero-value {
+  font-size: clamp(2.4rem, 6vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+.tel-hero-value em { font-size: 0.4em; font-style: normal; color: var(--dim); letter-spacing: 0; }
+.tel-delta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  font-size: 0.98rem;
+  font-weight: 500;
+  margin-top: 0.2rem;
+}
+.tel-delta.is-up { color: var(--up); }
+.tel-delta.is-down { color: var(--down); }
+.tel-delta-since { color: var(--dim); font-weight: 400; font-size: 0.82rem; }
+
+.tel-hero-tiles {
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 0.5rem;
+  align-content: center;
+}
+.tel-tile {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid var(--hair);
+  padding-bottom: 0.4rem;
+}
+.tel-tile:last-child { border-bottom: none; }
+.tel-tile-k { font-size: 0.82rem; color: var(--dim); }
+.tel-tile-v { font-size: 1.02rem; font-variant-numeric: tabular-nums; }
+.tel-tile-v.is-up { color: var(--up); }
+
+/* 3 & 4 — charts */
+.tel-chart {
+  margin: 0;
+  border: 1px solid var(--hair);
+  background: var(--card);
+  padding: 1rem 1.1rem 1.1rem;
+}
+.tel-chart figcaption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+.tel-chart-now { font-variant-numeric: tabular-nums; color: var(--dim); }
+.tel-earning { color: var(--up); font-size: 0.82rem; }
+.tel-idle { color: var(--dim); font-size: 0.82rem; }
+.tel-chart-note {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--dim);
+  margin: 0.7rem 0 0;
+  max-width: 62ch;
+}
+
+.chart { position: relative; width: 100%; }
+.chart-svg { display: block; width: 100%; height: auto; touch-action: none; }
+.chart-wait {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+.chart-base { stroke: var(--hair); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-baselabel { fill: var(--dim); font-size: 10px; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.chart-cross { stroke: var(--dim); stroke-width: 1; stroke-dasharray: 2 2; }
+.zone { fill: rgba(230, 225, 212, 0.06); }
+.zone-edge { stroke: var(--hair); stroke-width: 1; }
+.zone-label {
+  fill: var(--dim);
+  font-size: 10px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.chart-tip {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 5 — advanced */
+.tel-adv {
+  border: 1px solid var(--hair);
+  background: var(--card);
+  padding: 0.4rem 1.1rem;
+}
+.tel-adv summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--dim);
+  padding: 0.5rem 0;
+  list-style: none;
+}
+.tel-adv summary::-webkit-details-marker { display: none; }
+.tel-adv summary::before { content: '▸ '; color: var(--signal); }
+.tel-adv[open] summary::before { content: '▾ '; }
+.tel-adv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 1.4rem;
+  padding: 0.4rem 0 0.8rem;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+.tel-adv-grid > div { display: flex; justify-content: space-between; border-bottom: 1px solid var(--hair); padding-bottom: 0.3rem; }
+.tel-adv-grid span { color: var(--dim); }
+
+.tel-foot {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .tel-hero { grid-template-columns: 1fr; }
 }
