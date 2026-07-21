@@ -9,16 +9,20 @@
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, extname } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = resolve(here, '..', 'dist');
 
+// Local dev pins a specific cached chromium (version-match quirk). In CI (e.g. Cloudflare
+// Pages) that path won't exist, so fall through to Playwright's own resolved browser —
+// install it in the build with `npx playwright install chromium`.
+const LOCAL_CHROME = '/home/lummy/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome';
 const CHROME =
   process.env.CHROME_PATH ||
-  '/home/lummy/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome';
+  (existsSync(LOCAL_CHROME) ? LOCAL_CHROME : undefined);
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
@@ -44,7 +48,7 @@ const port = server.address().port;
 // Prerender is an enhancement, never a build-breaker: on any failure (no browser on
 // this machine, etc.) we keep the CSR index.html, which still carries all meta + JSON-LD.
 try {
-  const browser = await chromium.launch({ executablePath: CHROME });
+  const browser = await chromium.launch(CHROME ? { executablePath: CHROME } : {});
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
