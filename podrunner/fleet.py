@@ -42,8 +42,9 @@ from latency import LatencyModel  # noqa: E402
 
 LAT = LatencyModel()  # realistic execution latency, shared across the fleet
 
-FLEET_SIZE = int(os.environ.get("FLEET_SIZE", "3"))
-MIN_LIQ = float(os.environ.get("MIN_LIQ_USD", "50000"))
+FLEET_SIZE = int(os.environ.get("FLEET_SIZE", "3"))          # target number of ACTIVE pods
+STALE_CYCLES = int(os.environ.get("STALE_CYCLES", "60"))     # retire a pod with no position this many cycles
+REFILL_COOLDOWN = int(os.environ.get("REFILL_COOLDOWN", "4"))  # min cycles between re-select/refill attempts
 AMOUNT = float(os.environ.get("AMOUNT_QUOTE", "100"))
 RISK = os.environ.get("RISK", "balanced")
 POLL = float(os.environ.get("POLL_SECONDS", "3"))
@@ -191,6 +192,7 @@ class Pod:
 
     def __init__(self, pool_address, metrics=None):
         self.metrics = metrics or {}  # selection-time bucket (turnover, vol, age, liq)
+        self.stale = 0  # consecutive cycles with no live position (perched or idle)
         self.feed = LiveFeed(pool_address)
         info = self.feed.fetch()
         self.symbol = info["symbol"]
@@ -273,6 +275,10 @@ class Pod:
         }
 
 
+def usd(v, q):
+    return v * q if (q and v is not None) else None
+
+
 class Swarm:
     """Shared intelligence across the fleet — never shared capital."""
 
@@ -280,27 +286,38 @@ class Swarm:
         self.blacklist = set()
         self.alarms = 0
         self.vetoes = 0
+        self.retired_pnl = 0.0    # banked USD pnl from retired tokens — keeps the total honest
+        self.retired_fees = 0.0
+        self.retired = 0
 
     def update(self, pods):
         self.alarms = sum(1 for p in pods
                           if p.state.get("runtime_state") == "PERCHED" or p.state.get("hawkes_n", 0) >= 0.70)
         self.vetoes = sum(1 for p in pods if p.state.get("runtime_state") == "VETOED")
-        for p in pods:
-            if p.state.get("runtime_state") == "ASHES":
-                self.blacklist.add(p.symbol)
 
-
-def usd(v, q):
-    return v * q if (q and v is not None) else None
+    def retire(self, pod, reason):
+        """Bank the retired pod's realized result (so churn can't hide losses) and blacklist it."""
+        s = pod.state
+        q = s.get("quote_usd")
+        self.retired_pnl += usd(s.get("pnl"), q) or 0.0
+        self.retired_fees += usd(s.get("fees_earned"), q) or 0.0
+        self.retired += 1
+        self.blacklist.add(pod.symbol)
+        print(f"[fleet] retire {pod.symbol} ({reason}) pnl={s.get('pnl',0):+.4f} {pod.quote} "
+              f"fees={s.get('fees_earned',0):.5f}", flush=True)
 
 
 def emit(pods, swarm, t):
-    port_eq = sum(x for x in (usd(p.state.get("equity"), p.state.get("quote_usd")) for p in pods) if x) or 0.0
-    port_pnl = sum(x for x in (usd(p.state.get("pnl"), p.state.get("quote_usd")) for p in pods) if x) or 0.0
-    port_fees = sum(x for x in (usd(p.state.get("fees_earned"), p.state.get("quote_usd")) for p in pods) if x) or 0.0
+    live_eq = sum(x for x in (usd(p.state.get("equity"), p.state.get("quote_usd")) for p in pods) if x) or 0.0
+    live_pnl = sum(x for x in (usd(p.state.get("pnl"), p.state.get("quote_usd")) for p in pods) if x) or 0.0
+    live_fees = sum(x for x in (usd(p.state.get("fees_earned"), p.state.get("quote_usd")) for p in pods) if x) or 0.0
+    # book total = live pods + everything already banked from retirements (honest cumulative)
+    port_eq = live_eq + swarm.retired_pnl
+    port_pnl = live_pnl + swarm.retired_pnl
+    port_fees = live_fees + swarm.retired_fees
     print(f"\n[fleet t+{t:>4}s] PORTFOLIO ${port_eq:,.2f}  pnl {port_pnl:+.4f}$  fees {port_fees:.4f}$  "
-          f"| {len(pods)} pods · perched/alarm {swarm.alarms} · vetoed {swarm.vetoes} · "
-          f"blacklist {len(swarm.blacklist)} · tx-drops {LAT.drops}",
+          f"| {len(pods)} live · retired {swarm.retired} · perched {swarm.alarms} · "
+          f"vetoed {swarm.vetoes} · blacklist {len(swarm.blacklist)} · tx-drops {LAT.drops}",
           flush=True)
     for p in pods:
         s = p.state
@@ -336,6 +353,47 @@ def log_csv(path, pods, t):
                         f"{usd(s.get('fees_earned'),q) or 0:.4f}", f"{s.get('hawkes_n',0):.3f}", LAT.drops])
 
 
+async def rotate(pods, swarm, target, auto):
+    """Retire dead/stale pods (bank their result), then refill to target from fresh
+    selection. This is what makes the fleet a rolling book instead of a decaying snapshot."""
+    # mark staleness — but warm-up (HATCHING) is legitimately idle, so it doesn't count
+    for p in pods:
+        if p.state.get("runtime_state") == "HATCHING":
+            p.stale = 0
+            continue
+        active = p.state.get("position") not in ("idle", "", None)
+        p.stale = 0 if active else p.stale + 1
+    # retire the dead: refused at start, hit the equity floor, or stopped trading too long
+    for p in list(pods):
+        st = p.state.get("runtime_state")
+        if st == "VETOED":
+            swarm.retire(p, "VETOED")
+            pods.remove(p)
+        elif st == "ASHES":
+            swarm.retire(p, "ASHES")
+            pods.remove(p)
+        elif p.stale >= STALE_CYCLES:
+            swarm.retire(p, f"stale {p.stale}c")
+            pods.remove(p)
+    # refill to target (auto mode only; pinned POOLS just shrink)
+    if not auto or len(pods) >= target:
+        return
+    held = {p.symbol for p in pods}
+    picks = await asyncio.to_thread(select_tokens, target - len(pods) + 3, swarm.blacklist | held)
+    for m in picks:
+        if len(pods) >= target:
+            break
+        if m["symbol"] in held:
+            continue
+        try:
+            newpod = await asyncio.to_thread(Pod, m["addr"], m)
+            pods.append(newpod)
+            held.add(newpod.symbol)
+            print(f"[fleet] add {newpod.symbol}", flush=True)
+        except Exception as e:
+            print(f"[fleet] skip {m['symbol']} ({e})", flush=True)
+
+
 async def main():
     explicit = [x for x in (os.environ.get("POOLS", "").split(",")) if x]
     if explicit:
@@ -358,14 +416,17 @@ async def main():
         print(f"[fleet] soak logging → {SOAK_CSV}", flush=True)
 
     swarm = Swarm()
-    n = 0
+    auto = not explicit
+    target = len(pods)  # hold the fleet at the size it successfully armed
+    n, last_rotate = 0, 0
     while True:
-        infos = await asyncio.gather(*[asyncio.to_thread(p.feed.fetch) for p in pods], return_exceptions=True)
-        for p, info in zip(pods, infos):
-            if not isinstance(info, Exception):
-                p.apply_price(info)
-        for p in pods:
-            await p.tick(POLL)
+        if pods:
+            infos = await asyncio.gather(*[asyncio.to_thread(p.feed.fetch) for p in pods], return_exceptions=True)
+            for p, info in zip(pods, infos):
+                if not isinstance(info, Exception):
+                    p.apply_price(info)
+            for p in pods:
+                await p.tick(POLL)
         swarm.update(pods)
         n += 1
         t = int(n * POLL)
@@ -373,6 +434,12 @@ async def main():
             log_csv(SOAK_CSV, pods, t)
         if DRY:
             emit(pods, swarm, t)
+        # rotation: retire dead/stale, refill from fresh selection (rate-limited)
+        if n - last_rotate >= REFILL_COOLDOWN:
+            before = len(pods)
+            await rotate(pods, swarm, target, auto)
+            if len(pods) != before or before < target:
+                last_rotate = n
         await asyncio.sleep(POLL)
 
 

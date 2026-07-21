@@ -70,3 +70,9 @@ python3 soak_report.py soak.csv
 
 The bucket tables tell you which thresholds actually paid — tighten `SEL_*` toward the
 winning buckets and re-soak. Override selection with `POOLS=addr1,addr2` to pin tokens.
+
+**Rotation (rolling book):** the fleet isn't static — every few cycles it retires pods
+that hit the equity floor (`ASHES`), got refused (`VETOED`), or stopped trading for
+`STALE_CYCLES` cycles, banks their realized result (so churn can't hide losses), and
+refills to `FLEET_SIZE` from a fresh selection. Tunables: `STALE_CYCLES` (default 60),
+`REFILL_COOLDOWN` (4). Pinned `POOLS=` mode shrinks without refilling.
