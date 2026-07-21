@@ -63,18 +63,12 @@ export function BalanceChart({ points, start, quote }) {
   return (
     <div className="chart" onPointerMove={onMove} onPointerLeave={onLeave}>
       <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Your balance over time">
-        <defs>
-          <linearGradient id="balFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={col} stopOpacity="0.22" />
-            <stop offset="100%" stopColor={col} stopOpacity="0" />
-          </linearGradient>
-        </defs>
         {/* start baseline */}
         <line className="chart-base" x1={PAD.l} x2={W - PAD.r} y1={yStart} y2={yStart} />
         <text className="chart-baselabel" x={W - PAD.r} y={yStart - 5} textAnchor="end">
           start {fmt(start)}
         </text>
-        <path d={area} fill="url(#balFill)" />
+        <path d={area} fill={col} fillOpacity="0.08" />
         <path d={linePath(pts)} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {/* current point */}
         <circle cx={pts[n - 1].x} cy={pts[n - 1].y} r="3.5" fill={col} />

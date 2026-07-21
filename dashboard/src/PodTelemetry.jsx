@@ -63,7 +63,6 @@ export function PodTelemetryView({ state, history = [], quote = 'USDT', demo = f
           <strong>{status.label}</strong>
           <span>{status.sub}</span>
         </div>
-        {demo && <span className="tel-demo">DEMO · simulated</span>}
       </div>
 
       {/* 2 — how much money, up or down. the headline. */}
