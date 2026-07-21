@@ -26,7 +26,7 @@ function short(addr) {
 // be linked/screenshotted; it renders the exact dashboard against a simulated stream.
 function DemoView() {
   return (
-    <div className="app">
+    <div className="app app--wide">
       <header className="bar">
         <span className="wordmark">VÄLTGEIST</span>
         <span className="mono dim doc">DASHBOARD · DEMO</span>
@@ -113,7 +113,7 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app${session ? ' app--wide' : ''}`}>
       <header className="bar">
         <span className="wordmark">VÄLTGEIST</span>
         <span className="mono dim doc">DASHBOARD · VG-D1</span>

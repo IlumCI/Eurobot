@@ -554,3 +554,15 @@ a:focus-visible {
   .tel-adv-grid { grid-template-columns: 1fr; }
   .demo-banner a { white-space: normal; }
 }
+
+/* ---- dashboard uses the full width; charts sit side by side ---- */
+.app--wide { max-width: 1180px; }
+.app--wide .panel.signed { padding: 1.6rem 0 3rem; }
+.tel-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.1rem;
+}
+@media (max-width: 900px) {
+  .tel-charts { grid-template-columns: 1fr; }
+}

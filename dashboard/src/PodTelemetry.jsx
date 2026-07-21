@@ -94,36 +94,37 @@ export function PodTelemetryView({ state, history = [], quote = 'USDT', demo = f
         </div>
       </div>
 
-      {/* 3 — money over time */}
-      <figure className="tel-chart">
-        <figcaption>
-          <span>Your balance over time</span>
-          <span className="tel-chart-now">{money(equity)} {quote}</span>
-        </figcaption>
-        <BalanceChart points={history} start={start ?? equity} quote={quote} />
-      </figure>
+      {/* 3 & 4 — charts, side by side on desktop */}
+      <div className="tel-charts">
+        <figure className="tel-chart">
+          <figcaption>
+            <span>Your balance over time</span>
+            <span className="tel-chart-now">{money(equity)} {quote}</span>
+          </figcaption>
+          <BalanceChart points={history} start={start ?? equity} quote={quote} />
+        </figure>
 
-      {/* 4 — where it's trading (positions) */}
-      <figure className="tel-chart">
-        <figcaption>
-          <span>Where your pod is trading</span>
-          <span className={inRange ? 'tel-earning' : 'tel-idle'}>
-            {inRange ? '● earning now' : '○ waiting'}
-          </span>
-        </figcaption>
-        <PriceZone
-          points={history}
-          lower={Number(state.band_lower)}
-          upper={Number(state.band_upper)}
-          price={Number(state.price)}
-          inRange={inRange}
-          quote={quote}
-        />
-        <p className="tel-chart-note">
-          Your pod places buy &amp; sell orders across this zone. It collects a small fee each time the
-          price trades inside it. When it drifts out, the pod re-centres the zone.
-        </p>
-      </figure>
+        <figure className="tel-chart">
+          <figcaption>
+            <span>Where your pod is trading</span>
+            <span className={inRange ? 'tel-earning' : 'tel-idle'}>
+              {inRange ? '● earning now' : '○ waiting'}
+            </span>
+          </figcaption>
+          <PriceZone
+            points={history}
+            lower={Number(state.band_lower)}
+            upper={Number(state.band_upper)}
+            price={Number(state.price)}
+            inRange={inRange}
+            quote={quote}
+          />
+          <p className="tel-chart-note">
+            Your pod places buy &amp; sell orders across this zone and collects a small fee each time the
+            price trades inside it. When it drifts out, the pod re-centres the zone.
+          </p>
+        </figure>
+      </div>
 
       {/* 5 — for the curious (hidden by default) */}
       <details className="tel-adv">
