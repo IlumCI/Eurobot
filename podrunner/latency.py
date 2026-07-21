@@ -53,10 +53,19 @@ class LatencyModel:
                    + abs(self.rng.gauss(0.0, self.action_jitter)))
         return base * (self.congestion_mult if congested else 1.0)
 
-    def dropped(self, congested=False):
-        """True if a tx fails to land this attempt (must be re-issued next cycle)."""
-        p = self.fail_pct * (self.congestion_fail_mult if congested else 1.0)
-        hit = self.rng.random() < min(0.9, p)
-        if hit:
-            self.drops += 1
-        return hit
+    def effective_latency(self, congested=False):
+        """Total time for an action to LAND, folding in failed-and-retried attempts.
+
+        A failed tx is not dropped — it's re-sent, so it lands *later*, never never. This
+        is the honest model: modelling failure as a skipped action would desync the
+        controller (which tracks the action optimistically) and strand its panic-flatten.
+        Each failed attempt (more likely under congestion) adds another attempt's latency.
+        """
+        lat = self.action_latency(congested)
+        p = min(0.9, self.fail_pct * (self.congestion_fail_mult if congested else 1.0))
+        tries = 0
+        while tries < 5 and self.rng.random() < p:
+            tries += 1
+            lat += self.action_latency(congested)
+        self.drops += tries  # count of tx that needed at least one retry-attempt
+        return lat

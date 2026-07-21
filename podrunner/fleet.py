@@ -43,14 +43,18 @@ from latency import LatencyModel  # noqa: E402
 LAT = LatencyModel()  # realistic execution latency, shared across the fleet
 
 FLEET_SIZE = int(os.environ.get("FLEET_SIZE", "3"))          # target number of ACTIVE pods
-STALE_CYCLES = int(os.environ.get("STALE_CYCLES", "60"))     # retire a pod with no position this many cycles
-REFILL_COOLDOWN = int(os.environ.get("REFILL_COOLDOWN", "4"))  # min cycles between re-select/refill attempts
 AMOUNT = float(os.environ.get("AMOUNT_QUOTE", "100"))
 RISK = os.environ.get("RISK", "balanced")
 POLL = float(os.environ.get("POLL_SECONDS", "3"))
 FEE_PCT = float(os.environ.get("POOL_FEE_PCT", "0.25"))
 ALLOW_PUMP = os.environ.get("ALLOW_PUMP", "1") == "1"
 DRY = os.environ.get("DRY_RUN") == "1"
+# Seconds a pod waits between a close and the next open. A pod is LEGITIMATELY idle for up
+# to this long every cycle, so staleness must tolerate several such waits or rotation churns
+# healthy pods (the default 300s controller value at POLL=5 == 60 idle ticks — a trap).
+MIN_REBALANCE = int(os.environ.get("MIN_REBALANCE", "180"))
+STALE_CYCLES = int(os.environ.get("STALE_CYCLES", str(max(40, int(MIN_REBALANCE / max(POLL, 1)) * 3))))
+REFILL_COOLDOWN = int(os.environ.get("REFILL_COOLDOWN", "4"))
 
 RISK_MAP = {
     "conservative": {"kelly_fraction": "0.25", "ashes_floor_pct": "0.7"},
@@ -206,6 +210,7 @@ class Pod:
             total_amount_quote=Decimal(str(AMOUNT)),
             kelly_fraction=Decimal(risk["kelly_fraction"]),
             ashes_floor_pct=Decimal(risk["ashes_floor_pct"]),
+            min_rebalance_interval=MIN_REBALANCE,
             sample_interval=int(POLL), min_samples=12, vol_window=60,
             ema_fast=6, ema_slow=12, hawkes_min_events=3,
         )
@@ -233,18 +238,15 @@ class Pod:
         await self.ctrl.update_processed_data()
         congested = float(getattr(self.ctrl, "_branching_ratio", 0.0)) >= 0.5
         for a in self.ctrl.determine_executor_actions():
+            # Always apply; failure is modelled as LATER landing (retries), never a skip —
+            # skipping would strand the controller's panic-flatten (it tracks it optimistically).
+            lat = LAT.effective_latency(congested)
             if isinstance(a, sim.CreateExecutorAction):
-                if LAT.dropped(congested):
-                    continue  # tx failed to land; re-issued next tick
-                lat = LAT.action_latency(congested)
                 if getattr(a.executor_config, "type", None) == "order_executor":
                     self.executors.append(sim.SimOrderExecutor(a.executor_config, self.clock, self.pool, latency=lat))
                 else:
                     self.executors.append(sim.SimLPExecutor(a.executor_config, self.clock, self.pool, open_latency=lat))
             elif isinstance(a, sim.StopExecutorAction):
-                if LAT.dropped(congested):
-                    continue  # panic-close failed under congestion — the real risk, modelled
-                lat = LAT.action_latency(congested)
                 for ex in self.executors:
                     if ex.id == a.executor_id and hasattr(ex, "request_close"):
                         ex.request_close(lat)
@@ -283,26 +285,37 @@ class Swarm:
     """Shared intelligence across the fleet — never shared capital."""
 
     def __init__(self):
-        self.blacklist = set()
+        self.blacklist = set()   # permanent: blew up / refused
+        self.cooldown = {}       # symbol -> cycle when re-eligible (stale, but not necessarily bad)
         self.alarms = 0
         self.vetoes = 0
         self.retired_pnl = 0.0    # banked USD pnl from retired tokens — keeps the total honest
         self.retired_fees = 0.0
         self.retired = 0
+        self.last_refill = -10 ** 9  # allow the first refill immediately
 
     def update(self, pods):
         self.alarms = sum(1 for p in pods
                           if p.state.get("runtime_state") == "PERCHED" or p.state.get("hawkes_n", 0) >= 0.70)
         self.vetoes = sum(1 for p in pods if p.state.get("runtime_state") == "VETOED")
 
-    def retire(self, pod, reason):
-        """Bank the retired pod's realized result (so churn can't hide losses) and blacklist it."""
+    def excluded(self, now):
+        """Symbols the selector must skip: permanently blacklisted + still on cooldown."""
+        return self.blacklist | {s for s, c in self.cooldown.items() if c > now}
+
+    def retire(self, pod, reason, now, permanent):
+        """Bank the retired pod's realized result (so churn can't hide losses). Blown/refused
+        tokens are blacklisted forever; merely-stale ones get a cooldown so the universe of
+        candidates isn't exhausted over a long soak."""
         s = pod.state
         q = s.get("quote_usd")
         self.retired_pnl += usd(s.get("pnl"), q) or 0.0
         self.retired_fees += usd(s.get("fees_earned"), q) or 0.0
         self.retired += 1
-        self.blacklist.add(pod.symbol)
+        if permanent:
+            self.blacklist.add(pod.symbol)
+        else:
+            self.cooldown[pod.symbol] = now + STALE_CYCLES * 2
         print(f"[fleet] retire {pod.symbol} ({reason}) pnl={s.get('pnl',0):+.4f} {pod.quote} "
               f"fees={s.get('fees_earned',0):.5f}", flush=True)
 
@@ -353,7 +366,7 @@ def log_csv(path, pods, t):
                         f"{usd(s.get('fees_earned'),q) or 0:.4f}", f"{s.get('hawkes_n',0):.3f}", LAT.drops])
 
 
-async def rotate(pods, swarm, target, auto):
+async def rotate(pods, swarm, target, auto, now):
     """Retire dead/stale pods (bank their result), then refill to target from fresh
     selection. This is what makes the fleet a rolling book instead of a decaying snapshot."""
     # mark staleness — but warm-up (HATCHING) is legitimately idle, so it doesn't count
@@ -363,23 +376,25 @@ async def rotate(pods, swarm, target, auto):
             continue
         active = p.state.get("position") not in ("idle", "", None)
         p.stale = 0 if active else p.stale + 1
-    # retire the dead: refused at start, hit the equity floor, or stopped trading too long
+    # retire the dead: refused at start / hit the equity floor (permanent), or stopped
+    # trading far longer than a rebalance interval (cooldown — may be fine again later)
     for p in list(pods):
         st = p.state.get("runtime_state")
         if st == "VETOED":
-            swarm.retire(p, "VETOED")
+            swarm.retire(p, "VETOED", now, permanent=True)
             pods.remove(p)
         elif st == "ASHES":
-            swarm.retire(p, "ASHES")
+            swarm.retire(p, "ASHES", now, permanent=True)
             pods.remove(p)
         elif p.stale >= STALE_CYCLES:
-            swarm.retire(p, f"stale {p.stale}c")
+            swarm.retire(p, f"stale {p.stale}c", now, permanent=False)
             pods.remove(p)
-    # refill to target (auto mode only; pinned POOLS just shrink)
-    if not auto or len(pods) >= target:
+    # refill to target — rate-limited (select_tokens hits the network); pinned POOLS just shrink
+    if not auto or len(pods) >= target or (now - swarm.last_refill) < REFILL_COOLDOWN:
         return
+    swarm.last_refill = now
     held = {p.symbol for p in pods}
-    picks = await asyncio.to_thread(select_tokens, target - len(pods) + 3, swarm.blacklist | held)
+    picks = await asyncio.to_thread(select_tokens, target - len(pods) + 3, swarm.excluded(now) | held)
     for m in picks:
         if len(pods) >= target:
             break
@@ -418,7 +433,7 @@ async def main():
     swarm = Swarm()
     auto = not explicit
     target = len(pods)  # hold the fleet at the size it successfully armed
-    n, last_rotate = 0, 0
+    n = 0
     while True:
         if pods:
             infos = await asyncio.gather(*[asyncio.to_thread(p.feed.fetch) for p in pods], return_exceptions=True)
@@ -434,12 +449,8 @@ async def main():
             log_csv(SOAK_CSV, pods, t)
         if DRY:
             emit(pods, swarm, t)
-        # rotation: retire dead/stale, refill from fresh selection (rate-limited)
-        if n - last_rotate >= REFILL_COOLDOWN:
-            before = len(pods)
-            await rotate(pods, swarm, target, auto)
-            if len(pods) != before or before < target:
-                last_rotate = n
+        # rotation runs every cycle: staleness+retire are cheap; the refill self-rate-limits
+        await rotate(pods, swarm, target, auto, n)
         await asyncio.sleep(POLL)
 
 

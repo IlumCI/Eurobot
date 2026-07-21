@@ -121,18 +121,15 @@ async def tick(ctrl, clock, pool, executors, dt):
     # when the panic-flatten needs to fire. This is the real-money headwind, in paper.
     congested = float(getattr(ctrl, "_branching_ratio", 0.0)) >= 0.5
     for a in ctrl.determine_executor_actions():
+        # Always apply the action; failure/congestion is modelled as LATER landing, not a
+        # skipped action (skipping desyncs the controller's optimistic action tracking).
+        lat = LAT.effective_latency(congested)
         if isinstance(a, sim.CreateExecutorAction):
-            if LAT.dropped(congested):
-                continue  # tx failed to land; the controller re-issues next tick
-            lat = LAT.action_latency(congested)
             if getattr(a.executor_config, "type", None) == "order_executor":
                 executors.append(sim.SimOrderExecutor(a.executor_config, clock, pool, latency=lat))
             else:
                 executors.append(sim.SimLPExecutor(a.executor_config, clock, pool, open_latency=lat))
         elif isinstance(a, sim.StopExecutorAction):
-            if LAT.dropped(congested):
-                continue  # panic-close / rebalance tx failed under congestion — real risk
-            lat = LAT.action_latency(congested)
             for ex in executors:
                 if ex.id == a.executor_id and hasattr(ex, "request_close"):
                     ex.request_close(lat)
