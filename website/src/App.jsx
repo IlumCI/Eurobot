@@ -36,6 +36,16 @@ function useIsDesktop() {
 const HERO_SUB =
   'A hedge fund runs a market-making desk with pooled money, behind a seven-figure door. Vältgeist is that same desk, rebuilt to run on your own Solana wallet. Your capital stays in a vault only you can withdraw from, and the pod that trades it can rebalance your liquidity and nothing else — it can never move your funds out. One flat fee. We take no share of your profits.';
 
+// Pod finite-state machine, drawn as SVG in §02. x is the box's left edge in the 760-wide
+// viewBox; the main lane sits at y=44, the refused branch (VETOED) drops to y=168.
+const FSM_STATES = [
+  { name: 'HATCHING', sub: 'warm-up', x: 64 },
+  { name: 'FLYING', sub: 'quoting', x: 248 },
+  { name: 'PERCHED', sub: 'defensive', x: 432 },
+  { name: 'ASHES', sub: 'halted', x: 616, terminal: true },
+  { name: 'VETOED', sub: 'bad venue', x: 64, y: 168, terminal: true },
+];
+
 const MECHANISMS = [
   {
     id: 'M-01',
@@ -287,17 +297,66 @@ delegation     scoped · revocable · yours`}</pre>
             ))}
           </tbody>
         </table>
-        <div className="statechart">
-          <span className="statechart-label">POD STATES</span>
-          <pre>{`HATCHING ──▶ FLYING ◀──────┐
-                │            │  calm
-                │ cascade    │
-                ▼            │
-             PERCHED ────────┘
-                │ equity floor breached
-                ▼
-              ASHES ▪ permanent      VETOED ▪ bad venue, refused at start`}</pre>
-        </div>
+        <figure className="fsm">
+          <figcaption className="fsm-cap">
+            <span className="fsm-cap-tag">POD STATES</span>
+            <span>finite-state lifecycle · two terminal states in signal</span>
+          </figcaption>
+          <div className="fsm-canvas">
+            <svg
+              className="fsm-svg"
+              viewBox="0 0 760 236"
+              role="img"
+              aria-label="Pod state machine: the venue guard admits a pod to HATCHING or refuses it to VETOED. HATCHING warms up to FLYING, which quotes. A cascade moves FLYING to PERCHED; calm returns it. A breached equity floor moves PERCHED to the permanent ASHES state."
+            >
+              <defs>
+                <marker id="fsm-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path className="fsm-arrowhead" d="M0,0 L10,5 L0,10 z" />
+                </marker>
+                <marker id="fsm-arrow-alarm" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path className="fsm-arrowhead is-alarm" d="M0,0 L10,5 L0,10 z" />
+                </marker>
+              </defs>
+
+              {/* entry + edges */}
+              <circle className="fsm-entry" cx="16" cy="69" r="4" />
+              <line className="fsm-edge" x1="20" y1="69" x2="64" y2="69" markerEnd="url(#fsm-arrow)" />
+              <text className="fsm-elabel" x="42" y="63" textAnchor="middle">admit</text>
+
+              <path className="fsm-edge is-alarm" d="M16,73 L16,193 L64,193" markerEnd="url(#fsm-arrow-alarm)" />
+              <text className="fsm-elabel is-alarm" x="22" y="140" textAnchor="start">refuse</text>
+
+              <line className="fsm-edge" x1="196" y1="69" x2="248" y2="69" markerEnd="url(#fsm-arrow)" />
+              <text className="fsm-elabel" x="222" y="63" textAnchor="middle">warm-up</text>
+
+              <line className="fsm-edge is-alarm" x1="380" y1="61" x2="432" y2="61" markerEnd="url(#fsm-arrow-alarm)" />
+              <text className="fsm-elabel is-alarm" x="406" y="55" textAnchor="middle">cascade</text>
+              <line className="fsm-edge" x1="432" y1="77" x2="380" y2="77" markerEnd="url(#fsm-arrow)" />
+              <text className="fsm-elabel" x="406" y="91" textAnchor="middle">calm</text>
+
+              <line className="fsm-edge is-alarm" x1="564" y1="69" x2="616" y2="69" markerEnd="url(#fsm-arrow-alarm)" />
+              <text className="fsm-elabel is-alarm" x="590" y="63" textAnchor="middle">floor</text>
+
+              {/* states */}
+              {FSM_STATES.map(s => {
+                const y = s.y ?? 44;
+                const cx = s.x + 66;
+                const term = s.terminal ? ' is-terminal' : '';
+                return (
+                  <g key={s.name}>
+                    <rect className={`fsm-box${term}`} x={s.x} y={y} width="132" height="50" />
+                    <text className={`fsm-name${term}`} x={cx} y={y + 23} textAnchor="middle">
+                      {s.name}
+                    </text>
+                    <text className="fsm-sub" x={cx} y={y + 38} textAnchor="middle">
+                      {s.sub}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        </figure>
       </section>
 
       {/* ---- swarm ---- */}

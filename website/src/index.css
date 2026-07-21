@@ -438,28 +438,85 @@ a {
   max-width: 52ch;
 }
 
-.statechart {
-  margin-top: 2.4rem;
-  display: flex;
-  gap: 1.4rem;
-  align-items: flex-start;
-  flex-wrap: wrap;
+/* ---- pod state machine (SVG diagram, §02) ---- */
+.fsm {
+  margin: 2.4rem 0 0;
 }
-
-.statechart-label {
-  font-size: 0.65rem;
-  letter-spacing: 0.14em;
+.fsm-cap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-60);
+  margin-bottom: 0.9rem;
+}
+.fsm-cap-tag {
   color: var(--signal);
   font-weight: 600;
-  padding-top: 0.3rem;
 }
-
-.statechart pre {
-  font-family: inherit;
-  font-size: 0.78rem;
-  line-height: 1.7;
-  color: var(--ink-60);
+.fsm-canvas {
   overflow-x: auto;
+  border: 1px solid var(--hairline);
+  background: var(--paper-2);
+  padding: 1.2rem 1.3rem;
+}
+.fsm-svg {
+  display: block;
+  width: 100%;
+  min-width: 600px;
+  height: auto;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+.fsm-box {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+.fsm-box.is-terminal {
+  stroke: var(--signal);
+  stroke-dasharray: 3 2.5;
+}
+.fsm-name {
+  fill: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.fsm-name.is-terminal {
+  fill: var(--signal);
+}
+.fsm-sub {
+  fill: var(--ink-35);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+.fsm-edge {
+  fill: none;
+  stroke: var(--ink-60);
+  stroke-width: 1.25;
+}
+.fsm-edge.is-alarm {
+  stroke: var(--signal);
+}
+.fsm-elabel {
+  fill: var(--ink-60);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+.fsm-elabel.is-alarm {
+  fill: var(--signal);
+}
+.fsm-entry {
+  fill: var(--ink);
+}
+.fsm-arrowhead {
+  fill: var(--ink-60);
+}
+.fsm-arrowhead.is-alarm {
+  fill: var(--signal);
 }
 
 /* ---- swarm ledger ---- */
@@ -800,15 +857,8 @@ a {
   }
 
   /* Fixed-width diagrams scroll inside their own box, never past the page edge. */
-  .telemetry-body,
-  .statechart pre {
+  .telemetry-body {
     font-size: 0.72rem;
-  }
-  .statechart {
-    display: block;
-  }
-  .statechart pre {
-    margin-top: 0.6rem;
   }
 
   /* Swarm ledger: let the text column breathe. */
