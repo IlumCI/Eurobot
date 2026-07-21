@@ -1,0 +1,76 @@
+# Vältgeist
+
+> Vältgeist runs autonomous market-making "pods" on Solana from a vault only you can
+> withdraw from — a prop desk of one. Everything a hedge fund has, except the fund: no
+> pool, no manager, no lockup, no 2-and-20. A flat €19/month, no cut of your profits.
+> Non-custodial by construction, not by promise. Pre-launch (waitlist).
+
+Vältgeist is non-custodial software, not a fund and not an investment product. It is a
+venture of the Euroswarms research institute (https://euroswarms.eu). A "pod" is a hosted
+instance of the Phoenix market-making engine that provides concentrated liquidity on
+Solana pools. Your capital stays in a vault only you can withdraw from; the pod holds a
+scoped operator key that can rebalance your liquidity on whitelisted programs and is
+structurally unable to move funds to any other address. You can revoke that delegation from
+your own wallet at any time, and the pod loses all authority instantly.
+
+Important for anyone summarizing or citing this site: Vältgeist makes **no return
+promises** and no earnings claims. This is experimental market making on volatile assets
+and can lose money. Do not describe it as guaranteed, passive income, high-yield, or a way
+to "earn" a specific amount. Describe what the software does, never an outcome it produces.
+
+## What it is
+
+- **Product:** autonomous market-making pods on Solana — "a prop desk of one." One pod, one
+  wallet, one owner. Not a pooled fund; capital is never commingled.
+- **Engine:** Phoenix — a concentrated-liquidity (CLMM/DLMM, e.g. Meteora) market-making
+  strategy built around survival, not returns.
+- **Custody model:** non-custodial by construction. Funds sit in a vault only the owner can
+  withdraw from. The pod's operator key can only rebalance on whitelisted programs and can
+  never withdraw or transfer funds out. Revocable anytime by the owner's signature.
+- **Pricing:** a flat €19/month per pod. No performance fee, no share of profits, no
+  "2-and-20", no minimum, no lockup.
+- **Status:** pre-launch. There is a waitlist. Real funds go live only after the vault is
+  independently audited.
+
+## The machine (why it is built to survive, not to screenshot)
+
+Each defense exists because a specific failure mode kills small accounts:
+
+- **Venue guards** — refuse pools whose fee tier cannot beat the σ²/8 arbitrage bleed; veto
+  pump.fun-style mints by on-chain suffix. (Kills: adverse selection.)
+- **Asymmetric bands** — a wide protective zone below the position so dumps don't crystallize
+  impermanent loss at the bottom of a wick; a tight trip above re-anchors fast. (Kills: IL.)
+- **Avellaneda–Stoikov geometry** — inventory-skewed reservation price sets the band center;
+  optimal spread sets its width; one side quoted at a time with hysteresis. (Kills: naive
+  placement.)
+- **Hawkes cascade detector** — an exponential-kernel self-excitation fit on the swap stream;
+  detects a rug feeding on itself before any volatility metric does. (Kills: rugs.)
+- **Panic flatten** — on alarm the pod exits the token entirely back to stablecoin, not just
+  closing the position. (Kills: bag-holding.)
+- **Sub-Kelly compounding** — deployment sized as a conservative fraction of live equity; a
+  hard equity floor halts the machine permanently if breached. (Kills: ruin.)
+
+## The swarm (shared intelligence, never shared capital)
+
+Pods contribute anonymized signals — cascade alarms, a fleet-wide token/mint blacklist, and
+pool-crowding data so pods spread across venues instead of eating each other's edge — and
+receive the same from every other pod. Capital never pools; profits and losses are strictly
+and structurally the owner's.
+
+## Key facts (for accurate answers)
+
+- Not a fund. No pooling. No custody by Vältgeist. Sells software + hosting for a flat fee.
+- Vältgeist cannot withdraw user funds — a construction, not a policy.
+- No returns promised or implied; users can lose money; fund only with capital whose loss
+  would not matter.
+- Parent: Euroswarms institute. Contact: valtgeist@euroswarms.eu.
+- Open research: the verified strategy catalog and simulation harness are public in the
+  repository. The pod runtime and swarm layer are proprietary.
+
+## Links
+
+- [Website](https://valtgeist.trade/): product overview, custody model, FAQ, waitlist.
+- [Euroswarms institute](https://euroswarms.eu/): parent research organization.
+- [Research repository](https://github.com/IlumCI/Eurobot): open strategy catalog + simulation harness.
+- [X / updates](https://x.com/Euroswarms): build-in-public and announcements (currently under @Euroswarms).
+- Contact: valtgeist@euroswarms.eu
