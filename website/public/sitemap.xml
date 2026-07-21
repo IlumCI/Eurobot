@@ -10,4 +10,19 @@
       <image:title>Vältgeist — Everything a hedge fund has. Except the fund.</image:title>
     </image:image>
   </url>
+  <url>
+    <loc>https://valtgeist.trade/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://valtgeist.trade/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://valtgeist.trade/cookies</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
 </urlset>

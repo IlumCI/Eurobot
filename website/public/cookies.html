@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cookie Policy — Vältgeist</title>
+<meta name="description" content="Cookie Policy for Vältgeist — what cookies and local storage the site uses, and how to manage or opt out of them. A venture of the Euroswarms research institute." />
+<link rel="canonical" href="https://valtgeist.trade/cookies" />
+<meta name="robots" content="index, follow" />
+<link rel="icon" type="image/png" href="/favicon.png" />
+<meta name="theme-color" content="#121310" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)" />
+<script>try{var t=localStorage.getItem('es-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<style>
+:root{--paper:#f4f1ea;--paper-2:#ece8de;--ink:#17150f;--ink-60:rgba(23,21,15,.62);--ink-35:rgba(23,21,15,.35);--hairline:rgba(23,21,15,.18);--signal:#e8490f}
+:root[data-theme='dark']{--paper:#121310;--paper-2:#1b1d18;--ink:#e6e1d4;--ink-60:rgba(230,225,212,.62);--ink-35:rgba(230,225,212,.35);--hairline:rgba(230,225,212,.16);--signal:#ff5a1f}
+@media(prefers-color-scheme:dark){:root:not([data-theme='light']){--paper:#121310;--paper-2:#1b1d18;--ink:#e6e1d4;--ink-60:rgba(230,225,212,.62);--ink-35:rgba(230,225,212,.35);--hairline:rgba(230,225,212,.16);--signal:#ff5a1f}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:'Tinos','Times New Roman',Georgia,serif;font-size:18px;line-height:1.6;padding:0 24px}
+.mono{font-family:ui-monospace,'IBM Plex Mono','SF Mono',Menlo,Consolas,monospace}
+.wrap{max-width:760px;margin:0 auto;padding:40px 0 96px}
+.topbar{display:flex;justify-content:space-between;align-items:baseline;gap:16px;border-bottom:1px solid var(--hairline);padding-bottom:14px;margin-bottom:40px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-60)}
+.topbar a{color:var(--signal);text-decoration:none}
+.topbar a:hover{text-decoration:underline}
+h1{font-size:clamp(30px,6vw,46px);line-height:1.08;margin:0 0 8px;font-weight:400}
+.eff{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-60);margin:0 0 40px}
+h2{font-size:22px;font-weight:400;margin:40px 0 10px;padding-top:8px}
+h2 .s{color:var(--signal);font-family:ui-monospace,monospace;font-size:13px;margin-right:10px;vertical-align:2px}
+p,li{color:var(--ink)}
+a{color:var(--signal)}
+.lead{color:var(--ink-60)}
+ul{padding-left:20px}
+li{margin:6px 0}
+.note{border:1px solid var(--hairline);background:var(--paper-2);padding:16px 18px;font-size:15px;line-height:1.55;margin:24px 0}
+table{width:100%;border-collapse:collapse;margin:18px 0;font-size:15px}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--hairline)}
+th{font-family:ui-monospace,monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-60);font-weight:400}
+.tablewrap{overflow-x:auto}
+.btn{font-family:ui-monospace,monospace;font-size:13px;letter-spacing:.04em;text-transform:uppercase;background:var(--signal);color:#fff;border:none;padding:11px 16px;cursor:pointer}
+.btn:hover{opacity:.9}
+.docfoot{margin-top:64px;border-top:1px solid var(--hairline);padding-top:20px;font-size:13px;color:var(--ink-60);display:flex;flex-wrap:wrap;gap:8px 18px}
+.docfoot a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--hairline)}
+.docfoot a:hover{border-color:var(--signal);color:var(--signal)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar mono">
+    <span>Vältgeist · DOC. VG-103 / Cookies</span>
+    <a href="/">← valtgeist.trade</a>
+  </div>
+
+  <h1>Cookie Policy</h1>
+  <p class="eff mono">Effective 21 July 2026</p>
+
+  <p class="lead">This policy explains the cookies and similar local storage that valtgeist.trade uses, and
+  how you control them. We keep this deliberately minimal — the same engineering-first stance as the rest of
+  the site.</p>
+
+  <div class="note mono">Plain summary: today this site sets <strong>no advertising or cross-site tracking
+  cookies</strong>. It uses only a little local storage to make the site work (your theme and your consent
+  choice), and our traffic measurement (Cloudflare) is <strong>cookieless</strong>. Anything non-essential we
+  might add in future loads <strong>only after you opt in</strong>.</p>
+
+  <h2><span class="s mono">§01</span>What are cookies and local storage</h2>
+  <p>Cookies are small files a site can store in your browser; "local storage" is a similar browser mechanism
+  for saving small preferences on your device. Both let a site remember things between visits. Some are
+  <strong>strictly necessary</strong> for the site to function; others are optional.</p>
+
+  <h2><span class="s mono">§02</span>What we currently use</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Name</th><th>Type</th><th>Purpose</th><th>Category</th></tr></thead>
+    <tbody>
+      <tr><td>es-theme</td><td>Local storage</td><td>Remembers your light/dark theme choice</td><td>Strictly necessary / functional</td></tr>
+      <tr><td>vg-consent</td><td>Local storage</td><td>Remembers your cookie-consent choice so we don't ask again</td><td>Strictly necessary</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>These are first-party, stored only on your device, and are not used to track you across other sites. No
+  third party reads them.</p>
+
+  <h2><span class="s mono">§03</span>Analytics</h2>
+  <p>We measure basic, aggregate traffic (page views, referrers, rough geography) using Cloudflare's
+  privacy-first web analytics, which does <strong>not</strong> set cookies and does not fingerprint or track
+  individuals across sites. Because it is cookieless, it needs no consent — but it is still disclosed here for
+  transparency.</p>
+
+  <h2><span class="s mono">§04</span>If we add optional cookies later</h2>
+  <p>If we ever introduce cookies that are not strictly necessary (for example, a cookie-based analytics or
+  product tool), we will list them here and load them <strong>only after you opt in</strong> via the consent
+  banner. Rejecting them will always be as easy as accepting them.</p>
+
+  <h2><span class="s mono">§05</span>Managing your choices</h2>
+  <p>You can change your consent at any time using the button below, which reopens the consent banner. You can
+  also clear or block cookies and local storage in your browser settings; note that clearing storage will
+  reset your theme and consent preferences, so we may ask again.</p>
+  <p><button class="btn" type="button" onclick="try{localStorage.removeItem('vg-consent');}catch(e){}location.href='/#cookie-preferences';">Change my cookie preferences →</button></p>
+
+  <h2><span class="s mono">§06</span>Contact</h2>
+  <p>Questions about cookies: <a href="mailto:valtgeist@euroswarms.eu">valtgeist@euroswarms.eu</a>. See also
+  our <a href="/privacy">Privacy Policy</a>.</p>
+
+  <div class="docfoot mono">
+    <a href="/">Home</a>
+    <a href="/terms">Terms of Service</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="mailto:valtgeist@euroswarms.eu">valtgeist@euroswarms.eu</a>
+  </div>
+</div>
+</body>
+</html>

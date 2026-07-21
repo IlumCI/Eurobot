@@ -808,3 +808,109 @@ a {
     border-right: none;
   }
 }
+
+/* ---- legal footer links ---- */
+.colophon-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: center;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.colophon-links a,
+.colophon-linkbtn {
+  color: var(--ink-60);
+  text-decoration: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.colophon-links a:hover,
+.colophon-linkbtn:hover {
+  color: var(--signal);
+}
+
+/* ---- cookie consent banner ---- */
+.cc-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background: var(--paper-2);
+  border-top: 1px solid var(--hairline);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.14);
+}
+.cc-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  gap: 16px 28px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.cc-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  max-width: 68ch;
+}
+.cc-text a {
+  color: var(--signal);
+}
+.cc-label {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--signal);
+  margin-right: 10px;
+  vertical-align: 1px;
+}
+.cc-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.cc-btn {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 10px 16px;
+  cursor: pointer;
+  border: 1px solid var(--hairline);
+  background: none;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.cc-ghost:hover {
+  border-color: var(--ink);
+}
+.cc-solid {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: #fff;
+}
+.cc-solid:hover {
+  opacity: 0.9;
+}
+@media (max-width: 640px) {
+  .cc-actions {
+    width: 100%;
+  }
+  .cc-btn {
+    flex: 1;
+  }
+}

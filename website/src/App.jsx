@@ -5,6 +5,8 @@ import DecryptedText from './reactbits/DecryptedText.jsx';
 import SplitText from './reactbits/SplitText.jsx';
 import Logo from './Logo.jsx';
 import Waitlist from './Waitlist.jsx';
+import CookieConsent from './CookieConsent.jsx';
+import { openConsent } from './consent.js';
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -440,7 +442,17 @@ delegation     scoped · revocable · yours`}</pre>
             loss would not matter to you. Nothing on this page is a promise of returns.
           </p>
         </div>
+        <nav className="colophon-links mono" aria-label="Legal">
+          <a href="/terms">Terms of Service</a>
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/cookies">Cookie Policy</a>
+          <button type="button" className="colophon-linkbtn" onClick={openConsent}>
+            Cookie preferences
+          </button>
+        </nav>
       </footer>
+
+      <CookieConsent />
     </div>
   );
 }
