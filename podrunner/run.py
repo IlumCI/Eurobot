@@ -35,6 +35,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import phoenix_lp_sim as sim  # noqa: E402  installs the framework stubs + imports the real controller
 from live_feed import LiveFeed  # noqa: E402
+from latency import LatencyModel  # noqa: E402
+
+LAT = LatencyModel()  # realistic, jittery, congestion-aware execution latency
 
 POD_ID = os.environ.get("POD_ID")
 POD_TOKEN = os.environ.get("POD_TOKEN")
@@ -105,21 +108,34 @@ async def tick(ctrl, clock, pool, executors, dt):
     live price, let the controller decide, and apply its actions. Mirrors the
     proven Harness loop in phoenix_lp_sim.py."""
     clock.now += dt
+    # jittery data staleness + rpc latency, resampled each tick (the price the controller
+    # acts on is already old, by a varying amount).
+    pool.data_staleness = LAT.sample_staleness()
+    pool.rpc_latency = LAT.sample_rpc()
     pool.record()
     for ex in executors:
         ex.step()
     ctrl.executors_info = list(executors)
     await ctrl.update_processed_data()
+    # A building cascade == network congestion: txs land slower and fail more, exactly
+    # when the panic-flatten needs to fire. This is the real-money headwind, in paper.
+    congested = float(getattr(ctrl, "_branching_ratio", 0.0)) >= 0.5
     for a in ctrl.determine_executor_actions():
         if isinstance(a, sim.CreateExecutorAction):
+            if LAT.dropped(congested):
+                continue  # tx failed to land; the controller re-issues next tick
+            lat = LAT.action_latency(congested)
             if getattr(a.executor_config, "type", None) == "order_executor":
-                executors.append(sim.SimOrderExecutor(a.executor_config, clock, pool, latency=4.0))
+                executors.append(sim.SimOrderExecutor(a.executor_config, clock, pool, latency=lat))
             else:
-                executors.append(sim.SimLPExecutor(a.executor_config, clock, pool, open_latency=4.0))
+                executors.append(sim.SimLPExecutor(a.executor_config, clock, pool, open_latency=lat))
         elif isinstance(a, sim.StopExecutorAction):
+            if LAT.dropped(congested):
+                continue  # panic-close / rebalance tx failed under congestion — real risk
+            lat = LAT.action_latency(congested)
             for ex in executors:
                 if ex.id == a.executor_id and hasattr(ex, "request_close"):
-                    ex.request_close(4.0)
+                    ex.request_close(lat)
 
 
 def _position_code(active):

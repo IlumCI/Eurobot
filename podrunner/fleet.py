@@ -36,6 +36,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import phoenix_lp_sim as sim  # noqa: E402
 from live_feed import LiveFeed  # noqa: E402
+from latency import LatencyModel  # noqa: E402
+
+LAT = LatencyModel()  # realistic execution latency, shared across the fleet
 
 FLEET_SIZE = int(os.environ.get("FLEET_SIZE", "3"))
 MIN_LIQ = float(os.environ.get("MIN_LIQ_USD", "50000"))
@@ -134,21 +137,30 @@ class Pod:
 
     async def tick(self, dt):
         self.clock.now += dt
+        self.pool.data_staleness = LAT.sample_staleness()
+        self.pool.rpc_latency = LAT.sample_rpc()
         self.pool.record()
         for ex in self.executors:
             ex.step()
         self.ctrl.executors_info = list(self.executors)
         await self.ctrl.update_processed_data()
+        congested = float(getattr(self.ctrl, "_branching_ratio", 0.0)) >= 0.5
         for a in self.ctrl.determine_executor_actions():
             if isinstance(a, sim.CreateExecutorAction):
+                if LAT.dropped(congested):
+                    continue  # tx failed to land; re-issued next tick
+                lat = LAT.action_latency(congested)
                 if getattr(a.executor_config, "type", None) == "order_executor":
-                    self.executors.append(sim.SimOrderExecutor(a.executor_config, self.clock, self.pool, latency=4.0))
+                    self.executors.append(sim.SimOrderExecutor(a.executor_config, self.clock, self.pool, latency=lat))
                 else:
-                    self.executors.append(sim.SimLPExecutor(a.executor_config, self.clock, self.pool, open_latency=4.0))
+                    self.executors.append(sim.SimLPExecutor(a.executor_config, self.clock, self.pool, open_latency=lat))
             elif isinstance(a, sim.StopExecutorAction):
+                if LAT.dropped(congested):
+                    continue  # panic-close failed under congestion — the real risk, modelled
+                lat = LAT.action_latency(congested)
                 for ex in self.executors:
                     if ex.id == a.executor_id and hasattr(ex, "request_close"):
-                        ex.request_close(4.0)
+                        ex.request_close(lat)
         self.state = self._extract()
 
     def _extract(self):
@@ -202,7 +214,8 @@ def emit(pods, swarm, t):
     port_pnl = sum(x for x in (usd(p.state.get("pnl"), p.state.get("quote_usd")) for p in pods) if x) or 0.0
     port_fees = sum(x for x in (usd(p.state.get("fees_earned"), p.state.get("quote_usd")) for p in pods) if x) or 0.0
     print(f"\n[fleet t+{t:>4}s] PORTFOLIO ${port_eq:,.2f}  pnl {port_pnl:+.4f}$  fees {port_fees:.4f}$  "
-          f"| {len(pods)} pods · perched/alarm {swarm.alarms} · vetoed {swarm.vetoes} · blacklist {len(swarm.blacklist)}",
+          f"| {len(pods)} pods · perched/alarm {swarm.alarms} · vetoed {swarm.vetoes} · "
+          f"blacklist {len(swarm.blacklist)} · tx-drops {LAT.drops}",
           flush=True)
     for p in pods:
         s = p.state
