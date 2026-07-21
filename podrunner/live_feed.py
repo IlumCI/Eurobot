@@ -23,6 +23,22 @@ def _get_json(url, timeout):
         return json.load(r)
 
 
+def jupiter_usd_prices(mints, timeout=15):
+    """Batched USD prices for many mints in ONE Jupiter call → {mint: usdPrice}.
+
+    Lets a fleet price its whole book with a single request per tick instead of one per
+    pod, which is the difference between staying under Jupiter's rate limit and hammering
+    it. Missing/failed mints are simply absent from the returned dict (caller falls back)."""
+    ids = ",".join(m for m in mints if m)
+    if not ids:
+        return {}
+    try:
+        data = _get_json(JUP_URL.format(ids), timeout)
+    except Exception:
+        return {}
+    return {k: (v or {}).get("usdPrice") for k, v in data.items() if isinstance(v, dict)}
+
+
 class LiveFeed:
     """One Solana pool. `.fetch()` returns {price, base_mint, symbol, dex,
     liquidity_usd}; price is the base in quote units, live from Jupiter."""
@@ -90,6 +106,7 @@ class LiveFeed:
         info = {
             "price": price,
             "base_mint": meta["base_mint"],
+            "quote_mint": meta["quote_mint"],
             "symbol": meta["symbol"],
             "dex": meta["dex"],
             "liquidity_usd": meta["liquidity_usd"],

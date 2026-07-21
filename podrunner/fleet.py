@@ -37,7 +37,7 @@ sys.path.insert(0, str(REPO / "research"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import phoenix_lp_sim as sim  # noqa: E402
-from live_feed import LiveFeed  # noqa: E402
+from live_feed import LiveFeed, jupiter_usd_prices  # noqa: E402
 from latency import LatencyModel  # noqa: E402
 
 LAT = LatencyModel()  # realistic execution latency, shared across the fleet
@@ -201,6 +201,8 @@ class Pod:
         info = self.feed.fetch()
         self.symbol = info["symbol"]
         self.quote = self.symbol.split("-")[-1] if "-" in self.symbol else "?"
+        self.base_mint = info.get("base_mint")
+        self.quote_mint = info.get("quote_mint")
         self.quote_usd = info.get("quote_usd")
         self.price = info["price"]
         risk = RISK_MAP.get(RISK, RISK_MAP["balanced"])
@@ -366,6 +368,12 @@ def log_csv(path, pods, t):
                         f"{usd(s.get('fees_earned'),q) or 0:.4f}", f"{s.get('hawkes_n',0):.3f}", LAT.drops])
 
 
+def batch_prices(pods):
+    """One Jupiter call for the whole book: {mint: usdPrice} for every base+quote mint."""
+    mints = {m for p in pods for m in (p.base_mint, p.quote_mint) if m}
+    return jupiter_usd_prices(sorted(mints))
+
+
 async def rotate(pods, swarm, target, auto, now):
     """Retire dead/stale pods (bank their result), then refill to target from fresh
     selection. This is what makes the fleet a rolling book instead of a decaying snapshot."""
@@ -436,10 +444,22 @@ async def main():
     n = 0
     while True:
         if pods:
-            infos = await asyncio.gather(*[asyncio.to_thread(p.feed.fetch) for p in pods], return_exceptions=True)
-            for p, info in zip(pods, infos):
-                if not isinstance(info, Exception):
-                    p.apply_price(info)
+            # one batched Jupiter call for the whole book; per-pod fetch only for misses
+            usdmap = await asyncio.to_thread(batch_prices, pods)
+            fallbacks = []
+            for p in pods:
+                b, q = usdmap.get(p.base_mint), usdmap.get(p.quote_mint)
+                if b and q and q > 0:
+                    price = b / q
+                    p.price, p.path.price, p.quote_usd = price, price, q
+                else:
+                    fallbacks.append(p)
+            if fallbacks:
+                infos = await asyncio.gather(*[asyncio.to_thread(p.feed.fetch) for p in fallbacks],
+                                             return_exceptions=True)
+                for p, info in zip(fallbacks, infos):
+                    if not isinstance(info, Exception):
+                        p.apply_price(info)
             for p in pods:
                 await p.tick(POLL)
         swarm.update(pods)
