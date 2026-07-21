@@ -21,10 +21,12 @@ Config (env):
   DRY_RUN            1 = print the fleet table instead of POSTing telemetry
 """
 import asyncio
+import csv
+import datetime
 import json
-import math
 import os
 import sys
+import time
 import urllib.request
 from decimal import Decimal
 from pathlib import Path
@@ -62,33 +64,115 @@ def _get_json(url):
     return json.load(urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=12))
 
 
-def discover_pools(n, min_liq):
-    """Pick the n most-active Solana pools from DexScreener's boosted list, ranked by
-    short-term move x liquidity. This is the fleet's auto-selector."""
-    rows = []
+# ---------------------------------------------------------------- token selection
+# "Good" for an LP market maker = where fee income beats the sigma^2/8 bleed: a graduated
+# token (a real AMM pool, not a bonding curve) with real liquidity, high daily turnover
+# (the fee engine), volatility in a sweet-spot band (enough to cross the band, not a rug),
+# seasoned past the graduation dump. Every threshold is a HYPOTHESIS tunable by env; the
+# soak report is the judge. Candidates come from GeckoTerminal's top/trending pools — real
+# liquid pools ranked by volume, which is exactly the universe we want (unlike promo lists).
+GT = "https://api.geckoterminal.com/api/v2/networks/solana"
+
+SEL = {
+    "liq_min":   float(os.environ.get("SEL_LIQ_MIN", "80000")),     # can exit; not one-whale-moved
+    "turn_min":  float(os.environ.get("SEL_TURN_MIN", "3.0")),      # 24h volume / liquidity — the fee engine
+    "vol_min":   float(os.environ.get("SEL_VOL_MIN", "3.0")),       # |priceChange.h1| %, lower edge
+    "vol_max":   float(os.environ.get("SEL_VOL_MAX", "40.0")),      # upper edge (above this = rug territory)
+    "chop_max":  float(os.environ.get("SEL_CHOP_MAX", "35.0")),     # |priceChange.h6| — reject strong trends
+    "age_min_h": float(os.environ.get("SEL_AGE_MIN_H", "3.0")),     # hours since migration — skip dump window
+    "h24_min":   float(os.environ.get("SEL_H24_MIN", "-60.0")),     # already down >60% on the day = dying
+}
+
+
+def _get_json_safe(url):
     try:
-        boosts = _get_json("https://api.dexscreener.com/token-boosts/top/v1")
-    except Exception as e:
-        print(f"[fleet] discovery failed ({e})", flush=True)
-        return []
-    for b in [x for x in boosts if x.get("chainId") == "solana"][:25]:
-        try:
-            pairs = _get_json(f"https://api.dexscreener.com/token-pairs/v1/solana/{b['tokenAddress']}")
-        except Exception:
-            continue
-        if not pairs:
-            continue
-        p = max(pairs, key=lambda x: (x.get("liquidity") or {}).get("usd") or 0)
-        liq = (p.get("liquidity") or {}).get("usd") or 0
-        m5 = abs((p.get("priceChange") or {}).get("m5") or 0)
-        if liq >= min_liq and p.get("pairAddress"):
-            rows.append((m5 * math.log10(liq + 10), p["pairAddress"],
-                         f"{p.get('baseToken',{}).get('symbol')}-{p.get('quoteToken',{}).get('symbol')}"))
-    rows.sort(reverse=True)
-    picks = rows[:n]
-    for _, addr, sym in picks:
-        print(f"[fleet] selected {sym:18} {addr}", flush=True)
-    return [addr for _, addr, _ in picks]
+        return _get_json(url)
+    except Exception:
+        return {}
+
+
+def _gt_pools():
+    """Real, liquid, high-volume Solana pools (trending + top by volume), deduped."""
+    seen, out = set(), []
+    for url in (f"{GT}/trending_pools?page=1", f"{GT}/pools?page=1", f"{GT}/pools?page=2"):
+        for p in (_get_json_safe(url) or {}).get("data", []):
+            addr = (p.get("attributes") or {}).get("address")
+            if addr and addr not in seen:
+                seen.add(addr)
+                out.append(p)
+    return out
+
+
+def _age_hours(iso, now):
+    if not iso:
+        return 0.0
+    try:
+        return (now - datetime.datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()) / 3600.0
+    except Exception:
+        return 0.0
+
+
+def _metrics(p, now):
+    a = p.get("attributes", {}) or {}
+    liq = float(a.get("reserve_in_usd") or 0.0)
+    vol = a.get("volume_usd") or {}
+    ch = a.get("price_change_percentage") or {}
+    v24 = float(vol.get("h24") or 0.0)
+    dex = ((p.get("relationships") or {}).get("dex") or {}).get("data") or {}
+    return {
+        "addr": a.get("address"),
+        "symbol": (a.get("name") or "?").replace(" / ", "-").replace("/", "-"),
+        "dexId": dex.get("id", "?"),
+        "liq": liq,
+        "turnover": v24 / liq if liq > 0 else 0.0,           # daily turnover — fees per $ of capital
+        "vol_h1": abs(float(ch.get("h1") or 0.0)),
+        "vol_h6": abs(float(ch.get("h6") or 0.0)),
+        "ch_h24": float(ch.get("h24") or 0.0),
+        "age_h": _age_hours(a.get("pool_created_at"), now),
+    }
+
+
+def _passes(m, blacklist):
+    if not m["addr"]:
+        return "no-pair"
+    if m["symbol"] in blacklist:
+        return "blacklisted"
+    if m["liq"] < SEL["liq_min"]:               # real liquidity == graduated + exitable
+        return "liq<min"
+    if m["age_h"] < SEL["age_min_h"]:
+        return "too-fresh"
+    if m["turnover"] < SEL["turn_min"]:
+        return "turnover<min"
+    if not (SEL["vol_min"] <= m["vol_h1"] <= SEL["vol_max"]):
+        return "vol-out-of-band"
+    if m["vol_h6"] > SEL["chop_max"]:
+        return "trending"
+    if m["ch_h24"] < SEL["h24_min"]:
+        return "dying"
+    return "ok"
+
+
+def select_tokens(n, blacklist=frozenset()):
+    """Apply the filter hypothesis, rank survivors by turnover, return the top n metric dicts."""
+    now = time.time()
+    passed, rejects = [], {}
+    pools = _gt_pools()
+    for p in pools:
+        m = _metrics(p, now)
+        reason = _passes(m, blacklist)
+        if reason == "ok":
+            passed.append(m)
+        else:
+            rejects[reason] = rejects.get(reason, 0) + 1
+    passed.sort(key=lambda m: m["turnover"], reverse=True)
+    picks = passed[:n]
+    print(f"[select] {len(pools)} pools → {len(passed)} passed → top {len(picks)} by turnover", flush=True)
+    if rejects:
+        print("[select] rejects: " + ", ".join(f"{k} {v}" for k, v in sorted(rejects.items(), key=lambda x: -x[1])), flush=True)
+    for m in picks:
+        print(f"[select] {m['symbol']:16} {m['dexId']:10} liq=${m['liq']:,.0f} turn={m['turnover']:.1f} "
+              f"volh1={m['vol_h1']:.1f}% age={m['age_h']:.1f}h  {m['addr']}", flush=True)
+    return picks
 
 
 class LivePath:
@@ -105,7 +189,8 @@ class LivePath:
 class Pod:
     """One token: a real Phoenix controller + live feed + paper executors."""
 
-    def __init__(self, pool_address):
+    def __init__(self, pool_address, metrics=None):
+        self.metrics = metrics or {}  # selection-time bucket (turnover, vol, age, liq)
         self.feed = LiveFeed(pool_address)
         info = self.feed.fetch()
         self.symbol = info["symbol"]
@@ -224,20 +309,53 @@ def emit(pods, swarm, t):
               f"fees={s.get('fees_earned',0):.5f} n={s.get('hawkes_n',0):.2f}", flush=True)
 
 
+SOAK_CSV = os.environ.get("SOAK_CSV")
+CSV_COLS = ["ts", "t", "symbol", "dexId", "liq", "turnover", "vol_h1", "vol_h6", "age_h",
+            "state", "position", "quote", "quote_usd", "eq_q", "pnl_q", "fees_q",
+            "usd_eq", "usd_pnl", "usd_fees", "hawkes_n", "tx_drops"]
+
+
+def log_csv(path, pods, t):
+    """Append one row per pod per cycle, tagged with its selection bucket — the soak's
+    raw material. soak_report.py turns this into a per-bucket verdict."""
+    new = not os.path.exists(path)
+    with open(path, "a", newline="") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(CSV_COLS)
+        ts = time.time()
+        for p in pods:
+            s, m = p.state, p.metrics
+            q = s.get("quote_usd")
+            w.writerow([f"{ts:.0f}", t, p.symbol, m.get("dexId", ""), f"{m.get('liq',0):.0f}",
+                        f"{m.get('turnover',0):.3f}", f"{m.get('vol_h1',0):.2f}", f"{m.get('vol_h6',0):.2f}",
+                        f"{m.get('age_h',0):.2f}", s.get("runtime_state", ""), s.get("position", ""),
+                        p.quote, f"{q:.6f}" if q else "", f"{s.get('equity',0):.6f}",
+                        f"{s.get('pnl',0):.6f}", f"{s.get('fees_earned',0):.6f}",
+                        f"{usd(s.get('equity'),q) or 0:.4f}", f"{usd(s.get('pnl'),q) or 0:.4f}",
+                        f"{usd(s.get('fees_earned'),q) or 0:.4f}", f"{s.get('hawkes_n',0):.3f}", LAT.drops])
+
+
 async def main():
-    pools = [x for x in (os.environ.get("POOLS", "").split(",")) if x] or discover_pools(FLEET_SIZE, MIN_LIQ)
-    if not pools:
-        sys.exit("[fleet] no pools (set POOLS=addr1,addr2 or check discovery).")
+    explicit = [x for x in (os.environ.get("POOLS", "").split(",")) if x]
+    if explicit:
+        picks = [{"addr": a} for a in explicit]
+    else:
+        picks = select_tokens(FLEET_SIZE)
+    if not picks:
+        sys.exit("[fleet] no pools passed the filter (loosen SEL_* or set POOLS=addr1,addr2).")
 
     pods = []
-    for addr in pools:
+    for m in picks:
         try:
-            pods.append(Pod(addr))
+            pods.append(Pod(m["addr"], m))
             print(f"[fleet] armed {pods[-1].symbol}", flush=True)
         except Exception as e:
-            print(f"[fleet] skip {addr[:8]}… ({e})", flush=True)
+            print(f"[fleet] skip {m['addr'][:8]}… ({e})", flush=True)
     if not pods:
         sys.exit("[fleet] every pod failed to arm.")
+    if SOAK_CSV:
+        print(f"[fleet] soak logging → {SOAK_CSV}", flush=True)
 
     swarm = Swarm()
     n = 0
@@ -250,8 +368,11 @@ async def main():
             await p.tick(POLL)
         swarm.update(pods)
         n += 1
+        t = int(n * POLL)
+        if SOAK_CSV:
+            log_csv(SOAK_CSV, pods, t)
         if DRY:
-            emit(pods, swarm, int(n * POLL))
+            emit(pods, swarm, t)
         await asyncio.sleep(POLL)
 
 

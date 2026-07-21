@@ -47,3 +47,26 @@ to a file or committed; the orchestrator injects it via the environment.
 The runtime never holds a user private key. In the live build it holds only an
 **operator** key that can rebalance within whitelisted CLMMs behind the vault —
 withdrawal stays owner-only.
+
+## Fleet + soak (multi-token)
+
+`fleet.py` runs one Phoenix controller per token concurrently, sharing a swarm bus,
+against live Jupiter prices with the realistic latency model. Tokens are chosen by a
+tunable **selection filter** (the hypothesis) and the **soak report** is the judge.
+
+```bash
+# selection filter — "good" = graduated, liquid, high-turnover, moderate vol, seasoned
+#   SEL_LIQ_MIN (80000)  SEL_TURN_MIN (3.0, 24h vol/liq)  SEL_VOL_MIN/MAX (3/40 % h1)
+#   SEL_CHOP_MAX (35 % h6)  SEL_AGE_MIN_H (3)  SEL_H24_MIN (-60)
+# candidates come from GeckoTerminal top/trending pools.
+
+# run a soak: auto-select N tokens, log every cycle to CSV
+DRY_RUN=1 FLEET_SIZE=8 POLL_SECONDS=5 RISK=balanced SOAK_CSV=soak.csv python3 -u fleet.py
+#   ...let it run for hours, Ctrl+C to stop...
+
+# judge it: net PnL per token + per selection bucket (turnover / vol / age)
+python3 soak_report.py soak.csv
+```
+
+The bucket tables tell you which thresholds actually paid — tighten `SEL_*` toward the
+winning buckets and re-soak. Override selection with `POOLS=addr1,addr2` to pin tokens.
