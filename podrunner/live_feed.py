@@ -51,21 +51,21 @@ class LiveFeed:
         }
         return self._meta
 
-    def _jupiter_price(self, base_mint, quote_mint):
-        """Base priced in quote units = usd(base) / usd(quote). None if unavailable."""
+    def _jupiter(self, base_mint, quote_mint):
+        """Returns (native, quote_usd): native = usd(base)/usd(quote) (base priced in
+        quote units); quote_usd = USD per quote token (lets a fleet sum mixed quotes)."""
         data = _get_json(JUP_URL.format(f"{base_mint},{quote_mint}"), self.timeout)
         b = (data.get(base_mint) or {}).get("usdPrice")
         q = (data.get(quote_mint) or {}).get("usdPrice")
-        if b and q and q > 0:
-            return float(b) / float(q)
-        return None
+        native = float(b) / float(q) if b and q and q > 0 else None
+        return native, (float(q) if q else None)
 
     def fetch(self):
         meta = self._meta or self._load_meta()
 
-        price = None
+        price, quote_usd = None, None
         try:
-            price = self._jupiter_price(meta["base_mint"], meta["quote_mint"])
+            price, quote_usd = self._jupiter(meta["base_mint"], meta["quote_mint"])
         except Exception:
             price = None
 
@@ -75,6 +75,9 @@ class LiveFeed:
                 data = _get_json(PAIR_URL.format(self.pool_address), self.timeout)
                 p = (data.get("pairs") or [{}])[0]
                 price = float(p.get("priceNative") or 0)
+                pu, pn = float(p.get("priceUsd") or 0), price
+                if pu > 0 and pn > 0:
+                    quote_usd = pu / pn  # USD per quote token
             except Exception:
                 price = 0.0
         if not price or price <= 0:
@@ -90,6 +93,7 @@ class LiveFeed:
             "symbol": meta["symbol"],
             "dex": meta["dex"],
             "liquidity_usd": meta["liquidity_usd"],
+            "quote_usd": quote_usd,
         }
         self._last = info
         return info
