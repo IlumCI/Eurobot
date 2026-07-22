@@ -408,40 +408,48 @@ async def rotate(pods, swarm, target, auto, now):
             continue
         active = p.state.get("position") not in ("idle", "", None)
         p.stale = 0 if active else p.stale + 1
-    # retire the dead: refused at start / hit the equity floor (permanent), or stopped
-    # trading far longer than a rebalance interval (cooldown — may be fine again later)
+    # Remove ONLY the truly dead (blew the equity floor / refused at start) — always, and
+    # remember them forever. A PERCHED pod is NOT dead: it's sitting in cash, defending.
     for p in list(pods):
         st = p.state.get("runtime_state")
-        if st == "VETOED":
-            swarm.retire(p, "VETOED", now, permanent=True)
+        if st in ("VETOED", "ASHES"):
+            swarm.retire(p, st, now, permanent=True)
             pods.remove(p)
-        elif st == "ASHES":
-            swarm.retire(p, "ASHES", now, permanent=True)
-            pods.remove(p)
-        elif p.stale >= STALE_CYCLES:
-            # perched-for-ages or underwater == a repeat-offender to remember; a merely-quiet
-            # (flying, non-negative) pod just goes on cooldown and can come back later.
-            bad = p.state.get("runtime_state") == "PERCHED" or (p.state.get("pnl") or 0) < 0
-            swarm.retire(p, f"stale {p.stale}c", now, permanent=bad)
-            pods.remove(p)
-    # refill to target — rate-limited (select_tokens hits the network); pinned POOLS just shrink
-    if not auto or len(pods) >= target or (now - swarm.last_refill) < REFILL_COOLDOWN:
+    if not auto or (now - swarm.last_refill) < REFILL_COOLDOWN:
+        return
+    stale = [p for p in pods if p.stale >= STALE_CYCLES]
+    short = target - len(pods)  # empty slots left by dead pods
+    if short <= 0 and not stale:
         return
     swarm.last_refill = now
+
+    # Source replacements FIRST, then only rotate out a stale/perched pod if we actually got
+    # something better to put in its place. In a dead market select returns nothing, so the
+    # fleet HOLDS its defending pods and waits — instead of retiring them into an empty market
+    # and starving to zero (the death spiral).
     held = {p.symbol for p in pods}
-    picks = await asyncio.to_thread(select_tokens, target - len(pods) + 3, swarm.excluded(now) | held)
+    want = short + len(stale)
+    picks = await asyncio.to_thread(select_tokens, want + 3, swarm.excluded(now) | held)
+    new_pods = []
     for m in picks:
-        if len(pods) >= target:
+        if len(new_pods) >= want:
             break
         if m["symbol"] in held:
             continue
         try:
-            newpod = await asyncio.to_thread(Pod, m["addr"], m)
-            pods.append(newpod)
-            held.add(newpod.symbol)
-            print(f"[fleet] add {newpod.symbol}", flush=True)
+            np = await asyncio.to_thread(Pod, m["addr"], m)
+            new_pods.append(np)
+            held.add(np.symbol)
+            print(f"[fleet] add {np.symbol}", flush=True)
         except Exception as e:
             print(f"[fleet] skip {m['symbol']} ({e})", flush=True)
+    # replacements backfill the dead slots first; any surplus SWAPS OUT stale pods (cooldown,
+    # not permanent — a token that perched in a dump isn't bad forever)
+    retire_n = max(0, len(new_pods) - short)
+    for p in stale[:retire_n]:
+        swarm.retire(p, f"stale {p.stale}c", now, permanent=False)
+        pods.remove(p)
+    pods.extend(new_pods)
 
 
 async def main():
