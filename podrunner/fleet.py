@@ -25,6 +25,7 @@ import csv
 import datetime
 import json
 import os
+import random
 import sys
 import time
 import urllib.request
@@ -55,6 +56,25 @@ DRY = os.environ.get("DRY_RUN") == "1"
 MIN_REBALANCE = int(os.environ.get("MIN_REBALANCE", "180"))
 STALE_CYCLES = int(os.environ.get("STALE_CYCLES", str(max(40, int(MIN_REBALANCE / max(POLL, 1)) * 3))))
 REFILL_COOLDOWN = int(os.environ.get("REFILL_COOLDOWN", "4"))
+# Cross-run memory of tokens that blew up / cascaded, so a restart doesn't re-pick the same
+# failures. Symbols only (addresses churn); good enough to steer away from repeat offenders.
+BLACKLIST_FILE = os.environ.get("BLACKLIST_FILE", str(Path(__file__).resolve().parent / "fleet_blacklist.json"))
+
+
+def load_blacklist():
+    try:
+        with open(BLACKLIST_FILE) as f:
+            return set(json.load(f))
+    except Exception:
+        return set()
+
+
+def save_blacklist(bl):
+    try:
+        with open(BLACKLIST_FILE, "w") as f:
+            json.dump(sorted(bl), f)
+    except Exception:
+        pass
 
 RISK_MAP = {
     "conservative": {"kelly_fraction": "0.25", "ashes_floor_pct": "0.7"},
@@ -169,9 +189,12 @@ def select_tokens(n, blacklist=frozenset()):
             passed.append(m)
         else:
             rejects[reason] = rejects.get(reason, 0) + 1
+    # Rank by turnover, then RANDOM-SAMPLE from the top band so different runs try different
+    # tokens instead of deterministically re-picking the same names (and re-picking failures).
     passed.sort(key=lambda m: m["turnover"], reverse=True)
-    picks = passed[:n]
-    print(f"[select] {len(pools)} pools → {len(passed)} passed → top {len(picks)} by turnover", flush=True)
+    pool = passed[:max(n * 3, n)]
+    picks = random.sample(pool, min(n, len(pool)))
+    print(f"[select] {len(pools)} pools → {len(passed)} passed → {len(picks)} sampled from top {len(pool)}", flush=True)
     if rejects:
         print("[select] rejects: " + ", ".join(f"{k} {v}" for k, v in sorted(rejects.items(), key=lambda x: -x[1])), flush=True)
     for m in picks:
@@ -316,6 +339,7 @@ class Swarm:
         self.retired += 1
         if permanent:
             self.blacklist.add(pod.symbol)
+            save_blacklist(self.blacklist)  # remember it across runs
         else:
             self.cooldown[pod.symbol] = now + STALE_CYCLES * 2
         print(f"[fleet] retire {pod.symbol} ({reason}) pnl={s.get('pnl',0):+.4f} {pod.quote} "
@@ -395,7 +419,10 @@ async def rotate(pods, swarm, target, auto, now):
             swarm.retire(p, "ASHES", now, permanent=True)
             pods.remove(p)
         elif p.stale >= STALE_CYCLES:
-            swarm.retire(p, f"stale {p.stale}c", now, permanent=False)
+            # perched-for-ages or underwater == a repeat-offender to remember; a merely-quiet
+            # (flying, non-negative) pod just goes on cooldown and can come back later.
+            bad = p.state.get("runtime_state") == "PERCHED" or (p.state.get("pnl") or 0) < 0
+            swarm.retire(p, f"stale {p.stale}c", now, permanent=bad)
             pods.remove(p)
     # refill to target — rate-limited (select_tokens hits the network); pinned POOLS just shrink
     if not auto or len(pods) >= target or (now - swarm.last_refill) < REFILL_COOLDOWN:
@@ -419,10 +446,13 @@ async def rotate(pods, swarm, target, auto, now):
 
 async def main():
     explicit = [x for x in (os.environ.get("POOLS", "").split(",")) if x]
+    persisted = load_blacklist()
+    if persisted:
+        print(f"[fleet] {len(persisted)} tokens on the persistent blacklist ({BLACKLIST_FILE})", flush=True)
     if explicit:
         picks = [{"addr": a} for a in explicit]
     else:
-        picks = select_tokens(FLEET_SIZE)
+        picks = select_tokens(FLEET_SIZE, persisted)  # avoid known repeat offenders from the start
     if not picks:
         sys.exit("[fleet] no pools passed the filter (loosen SEL_* or set POOLS=addr1,addr2).")
 
@@ -439,6 +469,7 @@ async def main():
         print(f"[fleet] soak logging → {SOAK_CSV}", flush=True)
 
     swarm = Swarm()
+    swarm.blacklist = persisted  # carry cross-run memory into rotation
     auto = not explicit
     target = len(pods)  # hold the fleet at the size it successfully armed
     n = 0
