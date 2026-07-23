@@ -94,6 +94,9 @@ WATCH = None  # set in main() when WATCHLIST is on
 # Attach a candle-chart PNG to short lists + every CUT (rendered from GeckoTerminal OHLCV, not a
 # browser screenshot). Degrades to text automatically if Pillow/OHLCV isn't available. CHARTS=0 off.
 CHARTS = os.environ.get("CHARTS", "1") == "1"
+# Liveness file touched every loop — a healthcheck timer restarts the service if it goes stale
+# (catches a hung-but-not-crashed process, which Restart=always alone can't). Empty to disable.
+HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/run/valtgeist-alerts.heartbeat")
 
 
 def _deliver_watch(item):
@@ -870,6 +873,12 @@ async def main():
         swarm.update(pods)
         n += 1
         t = int(n * POLL)
+        if HEARTBEAT_FILE:
+            try:
+                with open(HEARTBEAT_FILE, "w") as _hb:
+                    _hb.write(str(t))
+            except OSError:
+                pass
         if ALERTBOOK is not None:
             # detection is pure+cheap; the Telegram POST is best-effort and kept off the loop
             for a in ALERTBOOK.scan(pods, t):

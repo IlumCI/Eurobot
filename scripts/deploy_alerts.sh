@@ -33,16 +33,17 @@ if [ ! -f /etc/valtgeist/alerts.env ]; then
 # --- FILL THESE IN, then: systemctl restart valtgeist-alerts ---
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
-# --- alert engine ---
-ALERTS=1
+# --- product: the degen watchlist (charts on single-lists + every CUT) ---
+WATCHLIST=1
+CHARTS=1
+# raw per-signal firehose off by default (WATCHLIST is the curated product)
+ALERTS=0
 WS_FEED=1
-DRY_RUN=1
+# DRY_RUN=0 keeps the logs quiet (the fleet only prints its per-cycle table when DRY_RUN=1)
+DRY_RUN=0
 FLEET_SIZE=6
 POLL_SECONDS=3
 RISK=aggressive
-# demo-tuned thresholds (raise to 0.70 / 0.80 for a high-signal production channel)
-ALERT_CASCADE_N=0.55
-ALERT_VPIN=0.70
 ENV
   chmod 600 /etc/valtgeist/alerts.env
   echo "   wrote /etc/valtgeist/alerts.env — EDIT IT to add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID"
@@ -51,9 +52,21 @@ else
 fi
 REMOTE
 
-echo "→ [3/4] installing systemd unit"
+echo "→ [3/4] installing systemd units (service + healthcheck timer) and capping the journal"
 scp "$REPO/scripts/valtgeist-alerts.service" "$TARGET:/etc/systemd/system/valtgeist-alerts.service"
-ssh "$TARGET" "systemctl daemon-reload && systemctl enable valtgeist-alerts >/dev/null 2>&1 || true"
+scp "$REPO/scripts/valtgeist-healthcheck.sh" "$TARGET:/usr/local/bin/valtgeist-healthcheck.sh"
+scp "$REPO/scripts/valtgeist-healthcheck.service" "$TARGET:/etc/systemd/system/valtgeist-healthcheck.service"
+scp "$REPO/scripts/valtgeist-healthcheck.timer" "$TARGET:/etc/systemd/system/valtgeist-healthcheck.timer"
+ssh "$TARGET" bash -s <<'REMOTE'
+set -euo pipefail
+chmod +x /usr/local/bin/valtgeist-healthcheck.sh
+mkdir -p /etc/systemd/journald.conf.d
+printf '[Journal]\nSystemMaxUse=200M\nMaxRetentionSec=1week\n' > /etc/systemd/journald.conf.d/00-valtgeist.conf
+systemctl restart systemd-journald || true
+systemctl daemon-reload
+systemctl enable valtgeist-alerts >/dev/null 2>&1 || true
+systemctl enable --now valtgeist-healthcheck.timer >/dev/null 2>&1 || true
+REMOTE
 
 echo "→ [4/4] done."
 cat <<NEXT

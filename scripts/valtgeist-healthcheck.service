@@ -1,0 +1,9 @@
+[Unit]
+Description=Valtgeist alert fleet healthcheck (restart if heartbeat stale)
+After=valtgeist-alerts.service
+
+[Service]
+Type=oneshot
+# optional: HEARTBEAT_FILE / HEALTHCHECK_MAX_AGE overrides can live in the same env file
+EnvironmentFile=-/etc/valtgeist/alerts.env
+ExecStart=/usr/local/bin/valtgeist-healthcheck.sh
