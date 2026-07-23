@@ -26,7 +26,7 @@ command -v python3 >/dev/null || { apt-get update && apt-get install -y python3;
 dpkg -s python3-venv >/dev/null 2>&1 || { apt-get update && apt-get install -y python3-venv python3-pip; }
 [ -d /opt/valtgeist/.venv ] || python3 -m venv /opt/valtgeist/.venv
 /opt/valtgeist/.venv/bin/pip install --quiet --upgrade pip
-/opt/valtgeist/.venv/bin/pip install --quiet websockets
+/opt/valtgeist/.venv/bin/pip install --quiet websockets pillow
 mkdir -p /etc/valtgeist
 if [ ! -f /etc/valtgeist/alerts.env ]; then
   cat > /etc/valtgeist/alerts.env <<'ENV'

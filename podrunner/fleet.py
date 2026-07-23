@@ -91,6 +91,23 @@ ALERTBOOK = None  # set in main() when ALERTS is on
 # speak when one flips. Independent of ALERTS (that's the raw per-signal firehose).
 WATCHLIST = os.environ.get("WATCHLIST") == "1"
 WATCH = None  # set in main() when WATCHLIST is on
+# Attach a candle-chart PNG to short lists + every CUT (rendered from GeckoTerminal OHLCV, not a
+# browser screenshot). Degrades to text automatically if Pillow/OHLCV isn't available. CHARTS=0 off.
+CHARTS = os.environ.get("CHARTS", "1") == "1"
+
+
+def _deliver_watch(item):
+    """Post one watchlist item off the event loop: chart+caption if asked, else plain text."""
+    text = item["text"]
+    if CHARTS and item.get("chart") and item.get("addr"):
+        try:
+            import chart_render
+            png = chart_render.chart_png(item["addr"], item.get("sym"), item["chart"])
+        except Exception:
+            png = None
+        if png and WATCH.notifier.post_photo(png, text, "watch"):
+            return
+    WATCH.notifier.post(text, "watch")
 # Seconds a pod waits between a close and the next open. max mode reprices near-continuously:
 # sitting on a stale quote is exactly the LVR bleed, and Solana gas is cheap enough to reprice.
 MIN_REBALANCE = int(os.environ.get("MIN_REBALANCE", "20" if RISK == "max" else "180"))
@@ -858,9 +875,9 @@ async def main():
             for a in ALERTBOOK.scan(pods, t):
                 await asyncio.to_thread(ALERTBOOK.send, a)
         if WATCH is not None:
-            # same split: update() is pure (prune + rebuild); the post is best-effort, off-loop
-            for text in WATCH.update(pods, t):
-                await asyncio.to_thread(WATCH.notifier.post, text, "watch")
+            # same split: update() is pure (prune + rebuild); the post (+ chart render) is off-loop
+            for item in WATCH.update(pods, t):
+                await asyncio.to_thread(_deliver_watch, item)
         if SOAK_CSV:
             log_csv(SOAK_CSV, pods, t)
         if DRY:

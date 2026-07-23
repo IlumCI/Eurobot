@@ -165,6 +165,33 @@ class AlertBook:
             print(f"[{tag}] telegram send failed: {e}", flush=True)
             return False
 
+    def post_photo(self, png, caption, tag="alert"):
+        """POST a PNG with caption via sendPhoto (multipart). Never raises. Returns delivered?
+
+        Returns False when not live or no image — the caller then falls back to a text post.
+        """
+        first = caption.splitlines()[0] if caption else ""
+        print(f"[{tag}] 📈 {first}", flush=True)
+        if not self.live or not png:
+            return False
+        try:
+            boundary = "valtgeistFormBoundary7MA4YWxkTrZu0gW"
+            body = b""
+            for name, value in (("chat_id", str(self.chat_id)), ("caption", caption)):
+                body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n"
+                         f"{value}\r\n").encode()
+            body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"photo\"; "
+                     f"filename=\"chart.png\"\r\nContent-Type: image/png\r\n\r\n").encode()
+            body += png + b"\r\n" + f"--{boundary}--\r\n".encode()
+            req = urllib.request.Request(
+                f"https://api.telegram.org/bot{self.token}/sendPhoto", data=body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return r.status == 200
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            print(f"[{tag}] telegram photo failed: {e}", flush=True)
+            return False
+
     def send(self, alert):
         """Print the alert, and POST to Telegram if configured. Never raises."""
         return self.post(alert.get("text", ""))
