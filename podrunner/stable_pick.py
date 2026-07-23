@@ -35,9 +35,7 @@ class StablePick:
         self.max_vol6 = _f(None, "STABLE_MAX_VOL6", "18")
         self.min_age_h = _f(None, "STABLE_MIN_AGE_H", "168")
         self.max_ch24 = _f(None, "STABLE_MAX_CH24", "20")   # >20%/day isn't "stable", it's a move
-        self.retry_s = _f(None, "STABLE_RETRY_S", "300")    # re-scan gap during a dry spell
-        self.last = None        # last SUCCESSFUL post (drives the hourly cadence)
-        self._last_scan = None  # last GT scan (rate-limits re-tries when nothing qualifies)
+        self.last = None        # last time the hourly slot was claimed (drives the cadence)
         self.recent = []        # last few featured symbols, to avoid repeating the same token
 
     def due(self, t):
@@ -81,21 +79,13 @@ class StablePick:
         self.recent = (self.recent + [best["symbol"]])[-6:]
         return best
 
-    def item(self, t, exclude=()):
-        """If due (and not just scanned), pick one and return a post-item, else None.
-
-        Only a SUCCESSFUL pick consumes the hourly slot; a dry scan just waits `retry_s` and tries
-        again (genuinely-calm tokens are rare in the pump-heavy universe, so dry spells happen).
-        """
-        if not self.due(t):
-            return None
-        if self._last_scan is not None and (t - self._last_scan) < self.retry_s:
-            return None
-        self._last_scan = t
+    def build(self, t, exclude=()):
+        """Scan (network) and return a post-item, or None. The caller gates on due() and claims the
+        hourly slot BEFORE calling this, then runs it in the background so the main loop never blocks
+        on the GeckoTerminal fetch. Genuinely-calm tokens are rare, so most scans return None."""
         m = self.pick(t, exclude)
         if not m:
             return None
-        self.last = t
         return {"text": self._text(m), "sym": m["symbol"], "addr": m["addr"], "chart": "stable"}
 
     def _text(self, m):

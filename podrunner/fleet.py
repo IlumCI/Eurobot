@@ -114,6 +114,20 @@ def _deliver(item, notifier, tag="watch"):
         if png and notifier.post_photo(png, text, tag):
             return
     notifier.post(text, tag)
+
+
+_BG_TASKS = set()  # keep strong refs so background tasks aren't GC'd mid-flight
+
+
+async def _stable_task(t, exclude):
+    """Scan + post the token of the hour entirely off the main loop (its GeckoTerminal fetch must
+    never stall ticks/cuts). Fired at most once an hour; failures are swallowed, not fatal."""
+    try:
+        item = await asyncio.to_thread(STABLEPICK.build, t, exclude)
+        if item:
+            await asyncio.to_thread(_deliver, item, STABLEPICK.notifier, "stable")
+    except Exception as e:
+        print(f"[stable] scan failed: {e}", flush=True)
 # Seconds a pod waits between a close and the next open. max mode reprices near-continuously:
 # sitting on a stale quote is exactly the LVR bleed, and Solana gas is cheap enough to reprice.
 MIN_REBALANCE = int(os.environ.get("MIN_REBALANCE", "20" if RISK == "max" else "180"))
@@ -897,11 +911,13 @@ async def main():
             # same split: update() is pure (prune + rebuild); the post (+ chart render) is off-loop
             for item in WATCH.update(pods, t):
                 await asyncio.to_thread(_deliver, item, WATCH.notifier, "watch")
-        if STABLEPICK is not None:
-            # token of the hour — pick from OUTSIDE the current (volatile) fleet, so it's a contrast
-            item = await asyncio.to_thread(STABLEPICK.item, t, {p.symbol for p in pods})
-            if item:
-                await asyncio.to_thread(_deliver, item, STABLEPICK.notifier, "stable")
+        if STABLEPICK is not None and STABLEPICK.due(t):
+            # token of the hour — run the whole scan in the BACKGROUND so its network fetch can't
+            # stall the loop. Claim the slot up front so we never spawn overlapping scans.
+            STABLEPICK.last = t
+            _task = asyncio.create_task(_stable_task(t, {p.symbol for p in pods}))
+            _BG_TASKS.add(_task)
+            _task.add_done_callback(_BG_TASKS.discard)
         if SOAK_CSV:
             log_csv(SOAK_CSV, pods, t)
         if DRY:
