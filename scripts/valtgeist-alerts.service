@@ -1,0 +1,19 @@
+[Unit]
+Description=Valtgeist alert fleet (cascade / toxic-flow / halt -> Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/valtgeist/podrunner
+# Secrets + tuning live here, NOT in the repo (matches the repo's env-only token rule).
+EnvironmentFile=/etc/valtgeist/alerts.env
+ExecStart=/opt/valtgeist/.venv/bin/python3 -u /opt/valtgeist/podrunner/fleet.py
+Restart=always
+RestartSec=10
+# light hardening
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
