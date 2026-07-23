@@ -31,9 +31,13 @@ def _fmt_px(p):
     return f"{p:.{digits}f}"
 
 
-def fetch_ohlcv(addr, aggregate=15, limit=48):
-    """-> list of (o,h,l,c) oldest->newest, or None. GeckoTerminal returns newest-first."""
-    url = f"{GT}/pools/{addr}/ohlcv/minute?aggregate={aggregate}&limit={limit}"
+def fetch_ohlcv(addr, timeframe="minute", aggregate=15, limit=48):
+    """-> list of (o,h,l,c) oldest->newest, or None. GeckoTerminal returns newest-first.
+
+    timeframe is one of GeckoTerminal's day|hour|minute; aggregate is valid only within it
+    (minute: 1/5/15, hour: 1/4/12) — so hourly candles need timeframe=hour, NOT minute/60.
+    """
+    url = f"{GT}/pools/{addr}/ohlcv/{timeframe}?aggregate={aggregate}&limit={limit}"
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "valtgeist"})
         with urllib.request.urlopen(req, timeout=12) as r:
@@ -110,9 +114,11 @@ def chart_png(addr, sym, kind="tradeable"):
     if not addr:
         return None
     if kind == "dying":
-        rows, tf, accent = fetch_ohlcv(addr, aggregate=5, limit=60), "5m", (224, 27, 36)
+        rows, tf, accent = fetch_ohlcv(addr, "minute", 5, 60), "5m", (224, 27, 36)
+    elif kind == "stable":
+        rows, tf, accent = fetch_ohlcv(addr, "hour", 1, 48), "1h", (38, 162, 105)
     else:
-        rows, tf, accent = fetch_ohlcv(addr, aggregate=15, limit=48), "15m", (255, 90, 31)
+        rows, tf, accent = fetch_ohlcv(addr, "minute", 15, 48), "15m", (255, 90, 31)
     if not rows or len(rows) < 4:
         return None
     base = (sym or "?").split("-")[0]

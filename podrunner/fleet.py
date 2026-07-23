@@ -91,6 +91,9 @@ ALERTBOOK = None  # set in main() when ALERTS is on
 # speak when one flips. Independent of ALERTS (that's the raw per-signal firehose).
 WATCHLIST = os.environ.get("WATCHLIST") == "1"
 WATCH = None  # set in main() when WATCHLIST is on
+# "Token of the hour" — the calm counterpoint to the watchlist (stable/rising, ~one per hour).
+STABLE = os.environ.get("STABLE", "1") == "1"
+STABLEPICK = None  # set in main() when STABLE is on
 # Attach a candle-chart PNG to short lists + every CUT (rendered from GeckoTerminal OHLCV, not a
 # browser screenshot). Degrades to text automatically if Pillow/OHLCV isn't available. CHARTS=0 off.
 CHARTS = os.environ.get("CHARTS", "1") == "1"
@@ -99,8 +102,8 @@ CHARTS = os.environ.get("CHARTS", "1") == "1"
 HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/run/valtgeist-alerts.heartbeat")
 
 
-def _deliver_watch(item):
-    """Post one watchlist item off the event loop: chart+caption if asked, else plain text."""
+def _deliver(item, notifier, tag="watch"):
+    """Post one item off the event loop: chart+caption if asked, else plain text."""
     text = item["text"]
     if CHARTS and item.get("chart") and item.get("addr"):
         try:
@@ -108,9 +111,9 @@ def _deliver_watch(item):
             png = chart_render.chart_png(item["addr"], item.get("sym"), item["chart"])
         except Exception:
             png = None
-        if png and WATCH.notifier.post_photo(png, text, "watch"):
+        if png and notifier.post_photo(png, text, tag):
             return
-    WATCH.notifier.post(text, "watch")
+    notifier.post(text, tag)
 # Seconds a pod waits between a close and the next open. max mode reprices near-continuously:
 # sitting on a stale quote is exactly the LVR bleed, and Solana gas is cheap enough to reprice.
 MIN_REBALANCE = int(os.environ.get("MIN_REBALANCE", "20" if RISK == "max" else "180"))
@@ -238,6 +241,7 @@ def _metrics(p, now):
         "base_mint": base_id.split("_", 1)[1] if "_" in base_id else base_id,
         "liq": liq,
         "mcap": float(a.get("market_cap_usd") or a.get("fdv_usd") or 0.0),  # mcap, fdv fallback
+        "price_usd": float(a.get("base_token_price_usd") or 0.0),
         "turnover": v24 / liq if liq > 0 else 0.0,           # daily turnover — fees per $ of capital
         "vol_h1": abs(float(ch.get("h1") or 0.0)),
         "vol_h6": abs(float(ch.get("h6") or 0.0)),
@@ -821,6 +825,11 @@ async def main():
         WATCH = Watchlist()
         print(f"[fleet] watchlist ON, refresh ~{WATCH.refresh_s / 3600:.1f}h "
               f"({'telegram' if WATCH.notifier.live else 'console only — set TELEGRAM_*'})", flush=True)
+    if STABLE:
+        global STABLEPICK
+        from stable_pick import StablePick
+        STABLEPICK = StablePick()
+        print(f"[fleet] token-of-the-hour ON, every ~{STABLEPICK.every_s / 3600:.1f}h", flush=True)
     auto = not explicit
     target = len(pods)  # hold the fleet at the size it successfully armed
     n = 0
@@ -887,7 +896,12 @@ async def main():
         if WATCH is not None:
             # same split: update() is pure (prune + rebuild); the post (+ chart render) is off-loop
             for item in WATCH.update(pods, t):
-                await asyncio.to_thread(_deliver_watch, item)
+                await asyncio.to_thread(_deliver, item, WATCH.notifier, "watch")
+        if STABLEPICK is not None:
+            # token of the hour — pick from OUTSIDE the current (volatile) fleet, so it's a contrast
+            item = await asyncio.to_thread(STABLEPICK.item, t, {p.symbol for p in pods})
+            if item:
+                await asyncio.to_thread(_deliver, item, STABLEPICK.notifier, "stable")
         if SOAK_CSV:
             log_csv(SOAK_CSV, pods, t)
         if DRY:
