@@ -237,6 +237,7 @@ def _metrics(p, now):
         "dexId": dex.get("id", "?"),
         "base_mint": base_id.split("_", 1)[1] if "_" in base_id else base_id,
         "liq": liq,
+        "mcap": float(a.get("market_cap_usd") or a.get("fdv_usd") or 0.0),  # mcap, fdv fallback
         "turnover": v24 / liq if liq > 0 else 0.0,           # daily turnover — fees per $ of capital
         "vol_h1": abs(float(ch.get("h1") or 0.0)),
         "vol_h6": abs(float(ch.get("h6") or 0.0)),

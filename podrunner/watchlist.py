@@ -37,7 +37,7 @@ the event loop (same split as alerts.scan/send).
 """
 import os
 
-from alerts import AlertBook
+from alerts import AlertBook, _fmt_price
 
 
 def _money(v):
@@ -146,8 +146,10 @@ class Watchlist:
         st = getattr(pod, "state", None) or {}
         return {
             "symbol": pod.symbol,
-            "addr": m.get("addr"),
+            "addr": m.get("addr"),                                    # pool address (for charts)
+            "ca": getattr(pod, "base_mint", None) or m.get("base_mint"),  # token mint (what degens copy)
             "liq": self._liq(pod),
+            "mcap": float(m.get("mcap") or 0.0),
             "vol_h1": float(m.get("vol_h1") or 0.0),
             "turnover": float(m.get("turnover") or 0.0),
             "age_h": float(m.get("age_h") or 0.0),
@@ -191,7 +193,7 @@ class Watchlist:
                 e["streak"] = 0
             if cut:
                 # chart the death: show the candles at the moment it turned
-                msgs.append({"text": self._cut_text(sym, cut), "sym": sym,
+                msgs.append({"text": self._cut_text(sym, cut, e.get("ca")), "sym": sym,
                              "addr": e.get("addr"), "chart": "dying"})
                 self._drop(sym)
         # 2) (re)build when: first run, refresh timer elapsed, or the list emptied — floored so an
@@ -225,23 +227,32 @@ class Watchlist:
 
     # ------------------------------------------------------------------ degen copy
     def _list_text(self, entries):
-        lines = []
+        blocks = []
         for e in entries:
-            heat = "🟢" if e["n"] < 0.2 else "🟡"
-            live = "⚡" if e["src"] == "ws" else "·"
-            lines.append(
-                f"{heat} ${_base(e['symbol'])}  ·  {_money(e['liq'])} liq  ·  "
-                f"🔥{e['vol_h1']:.0f}%/h  ·  {e['turnover']:.1f}x/day  ·  {_age(e['age_h'])}  {live}")
+            status = "🟢 calm" if e["n"] < 0.2 else "🟡 warming"
+            feed = "⚡ live (sub-second)" if e["src"] == "ws" else "~2s polled"
+            ca_line = f"\n• CA:        {e['ca']}" if e.get("ca") else ""
+            blocks.append(
+                f"${_base(e['symbol'])} — {status}\n"
+                f"• mcap:      {_money(e['mcap'])}\n"
+                f"• price:     {_fmt_price(e['price'])}\n"
+                f"• liquidity: {_money(e['liq'])}\n"
+                f"• 1h move:   {e['vol_h1']:.0f}%\n"
+                f"• turnover:  {e['turnover']:.1f}x/day\n"
+                f"• age:       {_age(e['age_h'])}\n"
+                f"• feed:      {feed}"
+                + ca_line)
         n = len(entries)
         return (f"🎯 TRADEABLE NOW · {n} pool{'s' if n != 1 else ''}\n"
-                f"active, liquid & not dumping. we watch these live and call it the second one turns 👇\n\n"
-                + "\n".join(lines)
-                + "\n\n🟢 calm · 🟡 warming · ⚡ live sub-second feed"
-                + "\n⚠️ not advice — any of these can rug. we post when they flip. dyor.")
+                f"active, liquid & not dumping — we watch live and call it the second one turns 👇\n\n"
+                + "\n\n".join(blocks)
+                + "\n\n⚠️ not advice — any of these can rug. we post when they flip. dyor.")
 
-    def _cut_text(self, sym, reason):
+    def _cut_text(self, sym, reason, ca=None):
+        ca_line = f"\nCA: {ca}" if ca else ""
         return (f"☠️ CUT ${_base(sym)} — {reason}.\n"
-                f"if you're LPing this, you're the exit liquidity. off the list.")
+                f"if you're LPing this, you're the exit liquidity. off the list."
+                + ca_line)
 
     def _empty_text(self):
         return ("🌑 nothing clean right now — every active pool is dumping or too thin.\n"
@@ -255,8 +266,9 @@ if __name__ == "__main__":
             self.symbol, self.metrics, self.state = symbol, metrics, state
 
     def pod(sym, liq=300000, vol=10, turn=4, age=500, n=0.0, vpin=0.3, imb=0.0,
-            rs="FLYING", src="ws", price=1.0):
-        return _P(sym, {"liq": liq, "vol_h1": vol, "turnover": turn, "age_h": age},
+            rs="FLYING", src="ws", price=1.0, mcap=1_200_000, ca="8N544CG9j44dkzu4CjSWHxpwekxHQPTR4R17Kw9y5FBk"):
+        return _P(sym, {"liq": liq, "mcap": mcap, "vol_h1": vol, "turnover": turn,
+                        "age_h": age, "base_mint": ca},
                   {"runtime_state": rs, "hawkes_n": n, "vpin": vpin, "imbalance": imb,
                    "price": price, "price_src": src})
 
