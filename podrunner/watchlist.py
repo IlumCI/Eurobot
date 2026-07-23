@@ -90,6 +90,8 @@ class Watchlist:
         self.min_rebuild_s = _f(min_rebuild_s, "WL_MIN_REBUILD_S", "180")
         # attach a candle chart when the list is this short (>=1) — a big list would be many images
         self.chart_list_max = int(os.environ.get("WL_CHART_LIST_MAX", "1"))
+        self.warm_n = _f(None, "WL_WARM_N", "0.20")        # n above this (but listed) = 🟡 warming
+        self.stab_heat = _f(None, "WL_STABILISING_HEAT", "0.50")  # recent heat above this = 🟠 stabilising
         self.order = []      # symbols, in rank order
         self.listed = {}     # symbol -> entry dict (with added_t / list_price / peak_price / streak)
         self.last_build = None
@@ -156,7 +158,17 @@ class Watchlist:
             "price": st.get("price"),
             "src": st.get("price_src", "jup"),
             "n": st.get("hawkes_n") or 0.0,
+            "heat_peak": st.get("heat_peak") or 0.0,
+            "imbalance": st.get("imbalance"),
         }
+
+    def _status(self, e):
+        """calm / warming / stabilising — the last needs memory (recently hot, now cooled)."""
+        if e.get("heat_peak", 0.0) >= self.stab_heat:
+            return "🟠 stabilising (post-dump)"   # was agitated recently, sell flow easing off
+        if e["n"] >= self.warm_n:
+            return "🟡 warming"                    # n creeping up, no recent spike — heading the wrong way
+        return "🟢 calm"
 
     def _score(self, e):
         # degens want ACTIVE: fee turnover weighted by recent move. calm is already guaranteed.
@@ -229,24 +241,31 @@ class Watchlist:
     def _list_text(self, entries):
         blocks = []
         for e in entries:
-            status = "🟢 calm" if e["n"] < 0.2 else "🟡 warming"
             feed = "⚡ live (sub-second)" if e["src"] == "ws" else "~2s polled"
             ca_line = f"\n• CA:        {e['ca']}" if e.get("ca") else ""
+            flow_line = ""
+            imb = e.get("imbalance")
+            if imb is not None:                     # only ws pods have real signed flow
+                buy = round((1 + max(-1.0, min(1.0, imb))) * 50)
+                lean = "balanced" if abs(imb) < 0.1 else ("buy-leaning" if imb > 0 else "sell-leaning")
+                flow_line = f"\n• flow:      {buy}% buy / {100 - buy}% sell ({lean})"
             blocks.append(
-                f"${_base(e['symbol'])} — {status}\n"
+                f"${_base(e['symbol'])} — {self._status(e)}\n"
                 f"• mcap:      {_money(e['mcap'])}\n"
                 f"• price:     {_fmt_price(e['price'])}\n"
                 f"• liquidity: {_money(e['liq'])}\n"
                 f"• 1h move:   {e['vol_h1']:.0f}%\n"
                 f"• turnover:  {e['turnover']:.1f}x/day\n"
-                f"• age:       {_age(e['age_h'])}\n"
-                f"• feed:      {feed}"
+                f"• age:       {_age(e['age_h'])}"
+                + flow_line
+                + f"\n• feed:      {feed}"
                 + ca_line)
         n = len(entries)
         return (f"🎯 TRADEABLE NOW · {n} pool{'s' if n != 1 else ''}\n"
                 f"active, liquid & not dumping — we watch live and call it the second one turns 👇\n\n"
                 + "\n\n".join(blocks)
-                + "\n\n⚠️ not advice — any of these can rug. we post when they flip. dyor.")
+                + "\n\n🟢 calm · 🟡 warming · 🟠 stabilising after a dump"
+                + "\n⚠️ not advice — any of these can rug. we post when they flip. dyor.")
 
     def _cut_text(self, sym, reason, ca=None):
         ca_line = f"\nCA: {ca}" if ca else ""
@@ -265,12 +284,12 @@ if __name__ == "__main__":
         def __init__(self, symbol, metrics, state):
             self.symbol, self.metrics, self.state = symbol, metrics, state
 
-    def pod(sym, liq=300000, vol=10, turn=4, age=500, n=0.0, vpin=0.3, imb=0.0,
+    def pod(sym, liq=300000, vol=10, turn=4, age=500, n=0.0, vpin=0.3, imb=0.0, heat=0.0,
             rs="FLYING", src="ws", price=1.0, mcap=1_200_000, ca="8N544CG9j44dkzu4CjSWHxpwekxHQPTR4R17Kw9y5FBk"):
         return _P(sym, {"liq": liq, "mcap": mcap, "vol_h1": vol, "turnover": turn,
                         "age_h": age, "base_mint": ca},
                   {"runtime_state": rs, "hawkes_n": n, "vpin": vpin, "imbalance": imb,
-                   "price": price, "price_src": src})
+                   "heat_peak": heat, "price": price, "price_src": src})
 
     wl = Watchlist(notifier=AlertBook(token="", chat_id=""), refresh_h=4, min_liq=50000,
                    min_rebuild_s=0, grace_s=0, danger_cycles=2, drop_pct=0.12, trail_pct=0.15)
@@ -311,8 +330,14 @@ if __name__ == "__main__":
     solo = wl.update([pod("SOLO-SOL", turn=6, vol=15)], t=99999)
     assert solo and solo[-1].get("chart") == "tradeable" and solo[-1]["sym"] == "SOLO-SOL", solo
 
-    print(wl._list_text([wl._entry(pod("NORMIE-SOL", liq=320000, vol=12, turn=4.4, age=510)),
-                         wl._entry(pod("KET-SOL", liq=115000, vol=39, turn=22.6, age=155, n=0.3, src="jup"))]))
+    # status taxonomy: calm / warming / stabilising (the last needs recent-heat memory)
+    assert wl._status(wl._entry(pod("A", n=0.0, heat=0.0))) == "🟢 calm"
+    assert wl._status(wl._entry(pod("A", n=0.3, heat=0.3))) == "🟡 warming"          # creeping up, never hot
+    assert "stabilising" in wl._status(wl._entry(pod("A", n=0.1, heat=0.7)))         # cooled after a spike
+
+    print(wl._list_text([
+        wl._entry(pod("NORMIE-SOL", liq=320000, vol=12, turn=4.4, age=510, n=0.15, heat=0.72, imb=-0.16)),
+        wl._entry(pod("KET-SOL", liq=115000, vol=39, turn=22.6, age=155, n=0.3, imb=0.22, src="jup"))]))
     print()
     print(wl._cut_text("旺旺-SOL", "dumped -18% since we listed it"))
     print("\nwatchlist self-test OK")

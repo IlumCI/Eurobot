@@ -100,6 +100,10 @@ CHARTS = os.environ.get("CHARTS", "1") == "1"
 # Liveness file touched every loop — a healthcheck timer restarts the service if it goes stale
 # (catches a hung-but-not-crashed process, which Restart=always alone can't). Empty to disable.
 HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/run/valtgeist-alerts.heartbeat")
+# Per-cycle decay of a pod's "recent heat" (rolling max of its Hawkes ratio). Lets the watchlist
+# tell a token cooling down AFTER a dump (recently hot, now calm = 'stabilising') from one heating
+# UP toward a dump (never hot, n creeping up = 'warming'). ~0.997/cycle ≈ 12-min half-life at POLL=3.
+HEAT_DECAY = float(os.environ.get("HEAT_DECAY", "0.997"))
 
 
 def _deliver(item, notifier, tag="watch"):
@@ -432,6 +436,7 @@ class Pod:
         self.fee_mark = 0.0  # last cumulative fee reading, to detect fee progress
         self.born = time.time()  # when this pod armed — drives the max-mode dwell TTL
         self.peak_pnl = 0.0      # best pnl seen (quote units) — drives the trailing stop
+        self.heat_peak = 0.0     # decaying rolling max of Hawkes n — "was this recently hot?"
         self.flow = FlowMeter()  # VPIN / imbalance / arrival rate from real trades
         self.ws = False          # registered on the ws vault feed?
         self.ws_price_ok = False # CPMM (vault-ratio price valid) vs CLMM (flow-only)
@@ -531,10 +536,12 @@ class Pod:
             st = active.get("state")
             pos = {"OPENING": "opening", "CLOSING": "closing",
                    "IN_RANGE": f"{side}_in", "OUT_OF_RANGE": f"{side}_out"}.get(st, "opening")
+        n = float(self.ctrl._branching_ratio)
+        self.heat_peak = max(n, self.heat_peak * HEAT_DECAY)  # decays back down after a pod cools off
         return {
             "runtime_state": self.ctrl.state, "position": pos, "price": self.price,
             "equity": equity, "pnl": equity - float(self.ctrl.config.total_amount_quote),
-            "fees_earned": fees, "hawkes_n": float(self.ctrl._branching_ratio),
+            "fees_earned": fees, "hawkes_n": n, "heat_peak": self.heat_peak,
             "quote_usd": self.quote_usd, "quote": self.quote,
         }
 
