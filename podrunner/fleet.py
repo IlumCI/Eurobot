@@ -85,6 +85,12 @@ GUI = None  # set in main() when CHART_GUI is on; emit() feeds it the curve
 # cascade/VPIN/halt signals the fleet already computes; posts to a channel or just the console.
 ALERTS = os.environ.get("ALERTS") == "1"
 ALERTBOOK = None  # set in main() when ALERTS is on
+# Watchlist mode (the degen-facing product): a live, self-pruning list of tradeable pools posted
+# every few hours; a listed pool that cascades/turns toxic is CUT and dropped; an emptied list
+# refreshes early. This is the conviction filter — only vetted-calm pools are listed, we only
+# speak when one flips. Independent of ALERTS (that's the raw per-signal firehose).
+WATCHLIST = os.environ.get("WATCHLIST") == "1"
+WATCH = None  # set in main() when WATCHLIST is on
 # Seconds a pod waits between a close and the next open. max mode reprices near-continuously:
 # sitting on a stale quote is exactly the LVR bleed, and Solana gas is cheap enough to reprice.
 MIN_REBALANCE = int(os.environ.get("MIN_REBALANCE", "20" if RISK == "max" else "180"))
@@ -788,6 +794,12 @@ async def main():
         ALERTBOOK = AlertBook()
         print(f"[fleet] alerts ON ({'telegram' if ALERTBOOK.live else 'console only — set TELEGRAM_*'})",
               flush=True)
+    if WATCHLIST:
+        global WATCH
+        from watchlist import Watchlist
+        WATCH = Watchlist()
+        print(f"[fleet] watchlist ON, refresh ~{WATCH.refresh_s / 3600:.1f}h "
+              f"({'telegram' if WATCH.notifier.live else 'console only — set TELEGRAM_*'})", flush=True)
     auto = not explicit
     target = len(pods)  # hold the fleet at the size it successfully armed
     n = 0
@@ -845,6 +857,10 @@ async def main():
             # detection is pure+cheap; the Telegram POST is best-effort and kept off the loop
             for a in ALERTBOOK.scan(pods, t):
                 await asyncio.to_thread(ALERTBOOK.send, a)
+        if WATCH is not None:
+            # same split: update() is pure (prune + rebuild); the post is best-effort, off-loop
+            for text in WATCH.update(pods, t):
+                await asyncio.to_thread(WATCH.notifier.post, text, "watch")
         if SOAK_CSV:
             log_csv(SOAK_CSV, pods, t)
         if DRY:

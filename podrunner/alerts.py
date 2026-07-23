@@ -143,10 +143,13 @@ class AlertBook:
                 f"state {rs} ({reason}). the strategy pulled out of this pool.")
 
     # ------------------------------------------------------------------ delivery (best-effort I/O)
-    def send(self, alert):
-        """Print the alert, and POST to Telegram if configured. Never raises."""
-        text = alert.get("text", "")
-        print(f"[alert] {text.splitlines()[0]}", flush=True)
+    def post(self, text, tag="alert"):
+        """Print + POST raw text to Telegram if configured. Never raises. Returns delivered?
+
+        The shared delivery path — both single alerts (send) and the watchlist post through here.
+        """
+        first = text.splitlines()[0] if text else ""
+        print(f"[{tag}] {first}", flush=True)
         if not self.live:
             return False
         try:
@@ -159,8 +162,12 @@ class AlertBook:
             with urllib.request.urlopen(req, timeout=8) as r:
                 return r.status == 200
         except (urllib.error.URLError, OSError, ValueError) as e:
-            print(f"[alert] telegram send failed: {e}", flush=True)
+            print(f"[{tag}] telegram send failed: {e}", flush=True)
             return False
+
+    def send(self, alert):
+        """Print the alert, and POST to Telegram if configured. Never raises."""
+        return self.post(alert.get("text", ""))
 
 
 if __name__ == "__main__":
