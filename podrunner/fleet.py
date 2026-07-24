@@ -100,6 +100,10 @@ CHARTS = os.environ.get("CHARTS", "1") == "1"
 # Liveness file touched every loop — a healthcheck timer restarts the service if it goes stale
 # (catches a hung-but-not-crashed process, which Restart=always alone can't). Empty to disable.
 HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/run/valtgeist-alerts.heartbeat")
+# Track-record ledger: every public call (CUT/list/stable) + fleet exits, with +5/15/60min
+# follow-up marks — the verifiable "we called it" record. LEDGER=0 disables.
+LEDGER_ON = os.environ.get("LEDGER", "1") == "1"
+LEDGER = None  # set in main()
 # Per-cycle decay of a pod's "recent heat" (rolling max of its Hawkes ratio). Lets the watchlist
 # tell a token cooling down AFTER a dump (recently hot, now calm = 'stabilising') from one heating
 # UP toward a dump (never hot, n creeping up = 'warming'). ~0.997/cycle ≈ 12-min half-life at POLL=3.
@@ -130,6 +134,9 @@ async def _stable_task(t, exclude):
     try:
         item = await asyncio.to_thread(STABLEPICK.build, t, exclude)
         if item:
+            if LEDGER is not None:
+                LEDGER.record_stable(item.get("sym", "?"), item.get("detail", ""),
+                                     item.get("price") or "", item.get("ca") or "")
             await asyncio.to_thread(_deliver, item, STABLEPICK.notifier, "stable")
     except Exception as e:
         print(f"[stable] scan failed: {e}", flush=True)
@@ -597,6 +604,12 @@ class Swarm:
                 WSF.unwatch_pool(pod.symbol)
             except Exception:
                 pass
+        if LEDGER is not None:
+            try:
+                LEDGER.record_retire(pod.symbol, reason, s.get("price"),
+                                     pod.base_mint, pod.base_mint, pod.quote_mint)
+            except Exception:
+                pass
         print(f"[fleet] retire {pod.symbol} ({reason}) pnl={s.get('pnl',0):+.4f} {pod.quote} "
               f"fees={s.get('fees_earned',0):.5f}", flush=True)
 
@@ -869,6 +882,12 @@ async def main():
         from stable_pick import StablePick
         STABLEPICK = StablePick()
         print(f"[fleet] token-of-the-hour ON, every ~{STABLEPICK.every_s / 3600:.1f}h", flush=True)
+    if LEDGER_ON:
+        global LEDGER
+        from ledger import Ledger
+        LEDGER = Ledger()
+        print(f"[fleet] ledger ON → {LEDGER.path} ({len(LEDGER.pending)} pending marks reloaded)",
+              flush=True)
     auto = not explicit
     target = len(pods)  # hold the fleet at the size it successfully armed
     n = 0
@@ -958,11 +977,28 @@ async def main():
             # A failed LIST post marks the channel unsynced so the next rebuild reposts.
             try:
                 for item in WATCH.update(pods, t):
+                    # ledger: record the CALL itself (delivery is a separate concern)
+                    if LEDGER is not None:
+                        if item.get("kind") == "cut":
+                            cp = next((p for p in pods if p.symbol == item.get("sym")), None)
+                            LEDGER.record_cut(
+                                item.get("sym", "?"), item.get("reason", ""),
+                                (cp.state.get("price") if cp else None),
+                                getattr(cp, "base_mint", None),
+                                getattr(cp, "base_mint", None), getattr(cp, "quote_mint", None))
+                        elif item.get("kind") == "list":
+                            LEDGER.record_list(WATCH.order)
                     ok = await asyncio.to_thread(_deliver, item, WATCH.notifier, "watch")
                     if not ok and WATCH.notifier.live and item.get("kind") in ("list", "empty"):
                         WATCH.mark_unsynced()
             except Exception as e:
                 print(f"[fleet] watchlist pass failed ({e})", flush=True)
+        if LEDGER is not None and LEDGER.due_now():
+            # resolve due +5/15/60min follow-up marks with one batched Jupiter call, off-loop
+            try:
+                await asyncio.to_thread(LEDGER.poll)
+            except Exception as e:
+                print(f"[fleet] ledger poll failed ({e})", flush=True)
         if STABLEPICK is not None and STABLEPICK.due(t):
             # token of the hour — run the whole scan in the BACKGROUND so its network fetch can't
             # stall the loop. Claim the slot up front so we never spawn overlapping scans.

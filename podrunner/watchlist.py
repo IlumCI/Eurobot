@@ -211,7 +211,7 @@ class Watchlist:
             if cut:
                 # chart the death: show the candles at the moment it turned
                 msgs.append({"kind": "cut", "text": self._cut_text(sym, cut, e.get("ca")),
-                             "sym": sym, "addr": e.get("addr"), "chart": "dying"})
+                             "sym": sym, "addr": e.get("addr"), "chart": "dying", "reason": cut})
                 self._cut_recent[sym] = t   # keep it off the list for recut_s (no cut-then-relist)
                 self._drop(sym)
         # 2) rebuild the current tradeable set and REPOST when it would change vs what's on the

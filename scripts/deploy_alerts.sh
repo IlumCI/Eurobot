@@ -17,7 +17,7 @@ ssh "$TARGET" "mkdir -p $REMOTE_DIR"
 # blacklist, soak CSVs, logs) on every redeploy.
 rsync -az --delete \
   --exclude '__pycache__' --exclude '*.pyc' \
-  --exclude 'fleet_blacklist.json' --exclude '*.csv' --exclude '*.log' \
+  --exclude 'fleet_blacklist.json' --exclude '*.csv' --exclude '*.log' --exclude '*.pending.json' \
   "$REPO/podrunner" "$REPO/research" "$REPO/controllers" \
   "$TARGET:$REMOTE_DIR/"
 

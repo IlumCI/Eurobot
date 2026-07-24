@@ -99,7 +99,9 @@ class StablePick:
         m = self.pick(t, exclude)
         if not m:
             return None
-        return {"text": self._text(m), "sym": m["symbol"], "addr": m["addr"], "chart": "stable"}
+        return {"text": self._text(m), "sym": m["symbol"], "addr": m["addr"], "chart": "stable",
+                "price": m.get("price_usd"), "ca": m.get("base_mint"),
+                "detail": f"24h {self._f0(m, 'ch_h24'):+.0f}% liq ${self._f0(m, 'liq'):,.0f}"}
 
     def _text(self, m):
         from alerts import _fmt_price
