@@ -14,6 +14,10 @@ RestartSec=10
 # light hardening
 NoNewPrivileges=true
 ProtectSystem=full
+# resource guards for a 2GB box: a leak degrades to a service restart, never an OOM'd host;
+# the ws feed races many endpoints x pools, so give file descriptors real headroom
+MemoryMax=400M
+LimitNOFILE=4096
 
 [Install]
 WantedBy=multi-user.target

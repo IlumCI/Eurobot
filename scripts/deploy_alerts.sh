@@ -13,8 +13,11 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "→ [1/4] syncing code to $TARGET:$REMOTE_DIR (podrunner + research + controllers only)"
 ssh "$TARGET" "mkdir -p $REMOTE_DIR"
+# NOTE the excludes: --delete would otherwise WIPE the box's runtime state (the cross-run
+# blacklist, soak CSVs, logs) on every redeploy.
 rsync -az --delete \
   --exclude '__pycache__' --exclude '*.pyc' \
+  --exclude 'fleet_blacklist.json' --exclude '*.csv' --exclude '*.log' \
   "$REPO/podrunner" "$REPO/research" "$REPO/controllers" \
   "$TARGET:$REMOTE_DIR/"
 

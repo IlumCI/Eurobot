@@ -18,15 +18,15 @@ GT = "https://api.geckoterminal.com/api/v2/networks/solana"
 
 
 def _fmt_px(p):
+    import math
     try:
         p = float(p)
     except (TypeError, ValueError):
         return "?"
-    if p <= 0:
+    if not math.isfinite(p) or p <= 0:  # NaN slips past p<=0 (all NaN comparisons are False)
         return "?"
     if p >= 1:
         return f"{p:,.4f}"
-    import math
     digits = min(12, max(4, 2 - int(math.floor(math.log10(p)))))
     return f"{p:.{digits}f}"
 

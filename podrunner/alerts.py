@@ -34,16 +34,18 @@ import urllib.request
 
 def _fmt_price(p):
     """Format a price across the huge dynamic range of Solana pairs (pump tokens are tiny)."""
+    import math
     try:
         p = float(p)
     except (TypeError, ValueError):
         return "?"
-    if p <= 0:
+    # NaN fails every comparison, so a plain p<=0 guard lets it through to log10 -> floor(nan)
+    # -> ValueError right in the alert path. isfinite() catches NaN and +/-inf in one go.
+    if not math.isfinite(p) or p <= 0:
         return "?"
     if p >= 1:
         return f"{p:,.4f}"
     # enough significant figures for sub-cent / sub-micro prices
-    import math
     digits = min(12, max(4, 2 - int(math.floor(math.log10(p)))))
     return f"{p:.{digits}f}"
 
@@ -82,7 +84,13 @@ class AlertBook:
         t:    integer seconds since fleet start (monotonic; the loop's n*POLL).
         """
         fired = []
-        seen_terminal = set()
+        # Prune state for symbols no longer in the fleet — tokens churn constantly, and without
+        # this the edge/cooldown dicts grow forever across weeks of rotation. (A symbol that
+        # rotates back in later is a NEW listing; re-arming it fresh is the correct semantic.)
+        live_syms = {getattr(p, "symbol", "?") for p in pods}
+        for d in (self._on, self._last):
+            for key in [k for k in d if k[0] not in live_syms]:
+                del d[key]
         for p in pods:
             st = getattr(p, "state", None) or {}
             sym = getattr(p, "symbol", "?")
@@ -92,7 +100,6 @@ class AlertBook:
             rs = st.get("runtime_state")
             if rs in ("VETOED", "ASHES"):
                 key = (sym, "halt")
-                seen_terminal.add(key)
                 if key not in self._on:
                     self._on[key] = True
                     self._last[key] = t
@@ -107,11 +114,14 @@ class AlertBook:
                        off=(n is None or n <= self.cascade_clear),
                        make=lambda: self._cascade_text(sym, n, price, st))
 
-            # --- toxic: VPIN high AND flow one-sided to the sell. clears when VPIN falls off.
+            # --- toxic: VPIN high AND flow one-sided to the sell. Clears when EITHER leg of the
+            # fire condition lapses (VPIN off OR flow no longer sell-sided) — clearing on VPIN
+            # alone would wedge the trigger "on" through a buy-flip and miss the next real
+            # sell episode entirely.
             vp, imb = st.get("vpin"), st.get("imbalance", 0.0)
             self._edge(fired, sym, "toxic", t,
                        on=(vp is not None and vp >= self.vpin and imb is not None and imb <= -self.imb),
-                       off=(vp is None or vp < self.vpin),
+                       off=(vp is None or vp < self.vpin or imb is None or imb > -self.imb),
                        make=lambda: self._toxic_text(sym, vp, imb, price, st))
         return fired
 
@@ -143,37 +153,88 @@ class AlertBook:
                 f"state {rs} ({reason}). the strategy pulled out of this pool.")
 
     # ------------------------------------------------------------------ delivery (best-effort I/O)
+    TEXT_MAX = 4096     # Telegram sendMessage hard limit
+    CAPTION_MAX = 1024  # Telegram sendPhoto caption hard limit
+
+    def _api(self, method, payload, tag, timeout=8):
+        """One Telegram Bot API call with a single retry on 429 (honouring Retry-After).
+        Never raises. Returns True on HTTP 200."""
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{self.token}/{method}",
+            data=data, headers={"Content-Type": "application/json"})
+        for attempt in (0, 1):
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    return r.status == 200
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt == 0:
+                    try:
+                        delay = min(float(e.headers.get("Retry-After", "3")), 30.0)
+                    except (TypeError, ValueError):
+                        delay = 3.0
+                    print(f"[{tag}] telegram 429; retrying in {delay:.0f}s", flush=True)
+                    import time
+                    time.sleep(delay)
+                    continue
+                print(f"[{tag}] telegram {method} failed: HTTP {e.code}", flush=True)
+                return False
+            except (urllib.error.URLError, OSError, ValueError) as e:
+                print(f"[{tag}] telegram {method} failed: {e}", flush=True)
+                return False
+        return False
+
+    @staticmethod
+    def _chunks(text, limit):
+        """Split text into <=limit chunks, preferring block ('\\n\\n') then line boundaries."""
+        if len(text) <= limit:
+            return [text]
+        out, cur = [], ""
+        for block in text.split("\n\n"):
+            while len(block) > limit:               # a single monster block: hard-split it
+                out.append(block[:limit])
+                block = block[limit:]
+            joined = f"{cur}\n\n{block}" if cur else block
+            if len(joined) > limit:
+                out.append(cur)
+                cur = block
+            else:
+                cur = joined
+        if cur:
+            out.append(cur)
+        return out
+
     def post(self, text, tag="alert"):
         """Print + POST raw text to Telegram if configured. Never raises. Returns delivered?
 
         The shared delivery path — both single alerts (send) and the watchlist post through here.
+        Long texts are split at block boundaries (Telegram hard-caps messages at 4096 chars —
+        a full 10-entry watchlist with CA lines can exceed it, and would otherwise be dropped).
         """
         first = text.splitlines()[0] if text else ""
         print(f"[{tag}] {first}", flush=True)
         if not self.live:
             return False
-        try:
-            data = json.dumps({
-                "chat_id": self.chat_id, "text": text, "disable_web_page_preview": True,
-            }).encode()
-            req = urllib.request.Request(
-                f"https://api.telegram.org/bot{self.token}/sendMessage",
-                data=data, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=8) as r:
-                return r.status == 200
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            print(f"[{tag}] telegram send failed: {e}", flush=True)
-            return False
+        ok = True
+        for chunk in self._chunks(text, self.TEXT_MAX - 16):
+            ok = self._api("sendMessage", {
+                "chat_id": self.chat_id, "text": chunk, "disable_web_page_preview": True,
+            }, tag) and ok
+        return ok
 
     def post_photo(self, png, caption, tag="alert"):
         """POST a PNG with caption via sendPhoto (multipart). Never raises. Returns delivered?
 
         Returns False when not live or no image — the caller then falls back to a text post.
+        Captions are hard-capped by Telegram at 1024 chars; over-long ones are truncated (the
+        caller's fallback-to-text path handles the full text if this ever matters).
         """
         first = caption.splitlines()[0] if caption else ""
         print(f"[{tag}] 📈 {first}", flush=True)
         if not self.live or not png:
             return False
+        if len(caption) > self.CAPTION_MAX:
+            caption = caption[:self.CAPTION_MAX - 1] + "…"
         try:
             boundary = "valtgeistFormBoundary7MA4YWxkTrZu0gW"
             body = b""
@@ -186,15 +247,37 @@ class AlertBook:
             req = urllib.request.Request(
                 f"https://api.telegram.org/bot{self.token}/sendPhoto", data=body,
                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-            with urllib.request.urlopen(req, timeout=15) as r:
-                return r.status == 200
+            for attempt in (0, 1):
+                try:
+                    with urllib.request.urlopen(req, timeout=15) as r:
+                        return r.status == 200
+                except urllib.error.HTTPError as e:
+                    if e.code == 429 and attempt == 0:
+                        try:
+                            delay = min(float(e.headers.get("Retry-After", "3")), 30.0)
+                        except (TypeError, ValueError):
+                            delay = 3.0
+                        print(f"[{tag}] telegram 429 (photo); retrying in {delay:.0f}s", flush=True)
+                        import time
+                        time.sleep(delay)
+                        continue
+                    raise
         except (urllib.error.URLError, OSError, ValueError) as e:
             print(f"[{tag}] telegram photo failed: {e}", flush=True)
             return False
+        return False
 
     def send(self, alert):
         """Print the alert, and POST to Telegram if configured. Never raises."""
         return self.post(alert.get("text", ""))
+
+    def unfire(self, alert):
+        """Roll back scan()'s edge state for one alert whose DELIVERY failed, so it re-fires
+        next cycle instead of being lost forever (halt alerts fire exactly once — a dropped
+        send would otherwise never be seen). Only call when .live and the send returned False."""
+        key = (alert.get("symbol"), alert.get("kind"))
+        self._on.pop(key, None)
+        self._last.pop(key, None)
 
 
 if __name__ == "__main__":

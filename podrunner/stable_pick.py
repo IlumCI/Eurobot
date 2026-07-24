@@ -45,29 +45,42 @@ class StablePick:
         # reuse the fleet's GeckoTerminal fetch + metric parse (fleet is already imported by then)
         from fleet import _gt_pools, _metrics
         now = time.time()
+        try:
+            pools = _gt_pools()   # guarded: a GT 429/outage must yield [], not a dead scan thread
+        except Exception:
+            return []
         out = []
-        for p in _gt_pools():
+        for p in pools:
             try:
                 out.append(_metrics(p, now))
             except Exception:
                 pass
         return out
 
+    @staticmethod
+    def _f0(m, k):
+        try:
+            v = float(m.get(k) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+        return v if v == v else 0.0  # NaN -> 0
+
     def _stable(self, m):
         return bool(
             m.get("addr")
-            and m["liq"] >= self.min_liq
-            and m["vol_h1"] <= self.max_vol1
-            and m["vol_h6"] <= self.max_vol6
-            and m["age_h"] >= self.min_age_h
-            and 0.0 <= m["ch_h24"] <= self.max_ch24   # rising/flat, not dumping, not a pump
+            and self._f0(m, "liq") >= self.min_liq
+            and self._f0(m, "vol_h1") <= self.max_vol1
+            and self._f0(m, "vol_h6") <= self.max_vol6
+            and self._f0(m, "age_h") >= self.min_age_h
+            and 0.0 <= self._f0(m, "ch_h24") <= self.max_ch24   # rising/flat, not dumping, not a pump
         )
 
     def _score(self, m):
         # reward gentle uptrend + deep liquidity + age; penalise volatility. calm is the point.
-        rising = min(m["ch_h24"], 40.0)
-        return (rising - 2.0 * m["vol_h1"] - m["vol_h6"]
-                + 5.0 * math.log10(max(m["liq"], 1.0)) + math.log10(max(m["age_h"], 1.0)))
+        rising = min(self._f0(m, "ch_h24"), 40.0)
+        return (rising - 2.0 * self._f0(m, "vol_h1") - self._f0(m, "vol_h6")
+                + 5.0 * math.log10(max(self._f0(m, "liq"), 1.0))
+                + math.log10(max(self._f0(m, "age_h"), 1.0)))
 
     def pick(self, t, exclude=()):
         cands = [m for m in self._candidates() if self._stable(m)]

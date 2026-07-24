@@ -107,7 +107,8 @@ HEAT_DECAY = float(os.environ.get("HEAT_DECAY", "0.997"))
 
 
 def _deliver(item, notifier, tag="watch"):
-    """Post one item off the event loop: chart+caption if asked, else plain text."""
+    """Post one item off the event loop: chart+caption if asked, else plain text.
+    Returns True if Telegram accepted it (False also covers console-only mode)."""
     text = item["text"]
     if CHARTS and item.get("chart") and item.get("addr"):
         try:
@@ -116,8 +117,8 @@ def _deliver(item, notifier, tag="watch"):
         except Exception:
             png = None
         if png and notifier.post_photo(png, text, tag):
-            return
-    notifier.post(text, tag)
+            return True
+    return notifier.post(text, tag)
 
 
 _BG_TASKS = set()  # keep strong refs so background tasks aren't GC'd mid-flight
@@ -572,7 +573,10 @@ class Swarm:
 
     def excluded(self, now):
         """Symbols the selector must skip: permanently blacklisted + still on cooldown."""
-        return self.blacklist | {s for s, c in self.cooldown.items() if c > now}
+        # prune expired cooldowns while we're here — under constant rotation this dict would
+        # otherwise grow without bound over a multi-day run
+        self.cooldown = {s: c for s, c in self.cooldown.items() if c > now}
+        return self.blacklist | set(self.cooldown)
 
     def retire(self, pod, reason, now, permanent):
         """Bank the retired pod's realized result (so churn can't hide losses). Blown/refused
@@ -773,19 +777,24 @@ async def rotate(pods, swarm, target, auto, now):
     held = {p.symbol for p in pods}
     want = short + len(stale)
     picks = await asyncio.to_thread(select_tokens, want + 3, swarm.excluded(now) | held)
+    # Build the candidates CONCURRENTLY: Pod() does network fetches (DexScreener + Jupiter +
+    # vault discovery, up to ~30s each) — serially this stalled every pod's ticks/alerts for
+    # the whole refill. gather() caps the stall at the slowest single candidate.
+    fresh = [m for m in picks if m["symbol"] not in held][:want + 2]
+    built = await asyncio.gather(*[asyncio.to_thread(Pod, m["addr"], m) for m in fresh],
+                                 return_exceptions=True)
     new_pods = []
-    for m in picks:
+    for m, np in zip(fresh, built):
         if len(new_pods) >= want:
             break
-        if m["symbol"] in held:
+        if isinstance(np, Exception):
+            print(f"[fleet] skip {m['symbol']} ({np})", flush=True)
             continue
-        try:
-            np = await asyncio.to_thread(Pod, m["addr"], m)
-            new_pods.append(np)
-            held.add(np.symbol)
-            print(f"[fleet] add {np.symbol}", flush=True)
-        except Exception as e:
-            print(f"[fleet] skip {m['symbol']} ({e})", flush=True)
+        if np.symbol in held:
+            continue
+        new_pods.append(np)
+        held.add(np.symbol)
+        print(f"[fleet] add {np.symbol}", flush=True)
     # replacements backfill the dead slots first; any surplus SWAPS OUT stale pods (cooldown,
     # not permanent — a token that perched in a dump isn't bad forever)
     retire_n = max(0, len(new_pods) - short)
@@ -809,22 +818,31 @@ async def main():
     persisted = load_blacklist()
     if persisted:
         print(f"[fleet] {len(persisted)} tokens on the persistent blacklist ({BLACKLIST_FILE})", flush=True)
-    if explicit:
-        picks = [{"addr": a} for a in explicit]
-    else:
-        picks = select_tokens(FLEET_SIZE, persisted)  # avoid known repeat offenders from the start
-    if not picks:
-        sys.exit("[fleet] no pools passed the filter (loosen SEL_* or set POOLS=addr1,addr2).")
 
-    pods = []
-    for m in picks:
-        try:
-            pods.append(Pod(m["addr"], m))
-            print(f"[fleet] armed {pods[-1].symbol}", flush=True)
-        except Exception as e:
-            print(f"[fleet] skip {m['addr'][:8]}… ({e})", flush=True)
-    if not pods:
-        sys.exit("[fleet] every pod failed to arm.")
+    # Arm the initial book, RETRYING instead of exiting: under systemd (Restart=always) a
+    # sys.exit here becomes a 10s crash-loop that hammers GeckoTerminal — the exact opposite
+    # of what a transient 429/empty-market blip needs. Wait and try again instead.
+    pods, wait = [], 30
+    while not pods:
+        if explicit:
+            picks = [{"addr": a} for a in explicit]
+        else:
+            try:
+                picks = await asyncio.to_thread(select_tokens, FLEET_SIZE, persisted)
+            except Exception as e:
+                print(f"[fleet] selection failed ({e}); retrying in {wait}s", flush=True)
+                picks = []
+        for m in picks:
+            try:
+                pods.append(Pod(m["addr"], m))
+                print(f"[fleet] armed {pods[-1].symbol}", flush=True)
+            except Exception as e:
+                print(f"[fleet] skip {m.get('addr', '?')[:8]}… ({e})", flush=True)
+        if not pods:
+            print(f"[fleet] nothing armed (filter empty or API down) — retrying in {wait}s "
+                  f"(loosen SEL_* or set POOLS=addr1,addr2 to pin)", flush=True)
+            await asyncio.sleep(wait)
+            wait = min(wait * 2, 600)  # back off to 10 min so we never hammer the APIs
     if SOAK_CSV:
         print(f"[fleet] soak logging → {SOAK_CSV}", flush=True)
 
@@ -880,27 +898,41 @@ async def main():
                 for p in pods:
                     if not p.ws:
                         continue
-                    p.price_src = "jup"
-                    lt = WSF.latest(p.symbol)
-                    if lt and p.ws_price_ok and lt[0] and lt[2] <= WS_MAX_AGE_MS:
-                        p.price = p.path.price = lt[0]
-                        p.price_src = "ws"
-                    evs = WSF.drain_events(p.symbol)
-                    if evs:
-                        p.flow.add(evs)
-                        # map wall-clock arrivals into the controller's sim-clock domain:
-                        # this tick spans (clock.now, clock.now+POLL]; place each event by
-                        # its real recency inside that span.
-                        base_clock = p.clock.now + POLL
-                        sells = [base_clock - min(max(wall_now - ts / 1000.0, 0.0), POLL)
-                                 for ts, side, _sz, _px in evs if side < 0]
-                        if sells:
-                            p.ctrl.feed_trade_events(sells)
-            for p in pods:
-                await p.tick(POLL)
-                if WSF is not None and p.ws:
-                    p.state.update(p.flow.metrics())
-                    p.state["price_src"] = p.price_src
+                    try:
+                        p.price_src = "jup"
+                        lt = WSF.latest(p.symbol)
+                        if lt and p.ws_price_ok and lt[0] and lt[2] <= WS_MAX_AGE_MS:
+                            p.price = p.path.price = lt[0]
+                            p.price_src = "ws"
+                        evs = WSF.drain_events(p.symbol)
+                        if evs:
+                            p.flow.add(evs)
+                            # map wall-clock arrivals into the controller's sim-clock domain:
+                            # this tick spans (clock.now, clock.now+POLL]; place each event by
+                            # its real recency inside that span.
+                            base_clock = p.clock.now + POLL
+                            sells = [base_clock - min(max(wall_now - ts / 1000.0, 0.0), POLL)
+                                     for ts, side, _sz, _px in evs if side < 0]
+                            if sells:
+                                p.ctrl.feed_trade_events(sells)
+                    except Exception as e:
+                        print(f"[fleet] {p.symbol}: ws layer hiccup ({e}); polling price", flush=True)
+            for p in list(pods):
+                # One sick pod (controller exception on a weird price, a NaN, a decimal edge)
+                # must never kill the whole fleet: log it, and retire it if it keeps failing.
+                try:
+                    await p.tick(POLL)
+                    p.tick_fails = 0
+                    if WSF is not None and p.ws:
+                        p.state.update(p.flow.metrics())
+                        p.state["price_src"] = p.price_src
+                except Exception as e:
+                    p.tick_fails = getattr(p, "tick_fails", 0) + 1
+                    print(f"[fleet] {p.symbol}: tick failed ({type(e).__name__}: {e}) "
+                          f"[{p.tick_fails}/5]", flush=True)
+                    if p.tick_fails >= 5:
+                        swarm.retire(p, f"sick (tick kept failing: {type(e).__name__})", n, permanent=False)
+                        pods.remove(p)
         swarm.update(pods)
         n += 1
         t = int(n * POLL)
@@ -911,13 +943,26 @@ async def main():
             except OSError:
                 pass
         if ALERTBOOK is not None:
-            # detection is pure+cheap; the Telegram POST is best-effort and kept off the loop
-            for a in ALERTBOOK.scan(pods, t):
-                await asyncio.to_thread(ALERTBOOK.send, a)
+            # detection is pure+cheap; the Telegram POST is best-effort and kept off the loop.
+            # A FAILED delivery rolls the edge state back (unfire) so the alert re-fires next
+            # cycle — otherwise a dropped halt alert (fire-once semantics) is lost forever.
+            try:
+                for a in ALERTBOOK.scan(pods, t):
+                    ok = await asyncio.to_thread(ALERTBOOK.send, a)
+                    if not ok and ALERTBOOK.live:
+                        ALERTBOOK.unfire(a)
+            except Exception as e:
+                print(f"[fleet] alert pass failed ({e})", flush=True)
         if WATCH is not None:
-            # same split: update() is pure (prune + rebuild); the post (+ chart render) is off-loop
-            for item in WATCH.update(pods, t):
-                await asyncio.to_thread(_deliver, item, WATCH.notifier, "watch")
+            # same split: update() is pure (prune + rebuild); the post (+ chart render) is off-loop.
+            # A failed LIST post marks the channel unsynced so the next rebuild reposts.
+            try:
+                for item in WATCH.update(pods, t):
+                    ok = await asyncio.to_thread(_deliver, item, WATCH.notifier, "watch")
+                    if not ok and WATCH.notifier.live and item.get("kind") in ("list", "empty"):
+                        WATCH.mark_unsynced()
+            except Exception as e:
+                print(f"[fleet] watchlist pass failed ({e})", flush=True)
         if STABLEPICK is not None and STABLEPICK.due(t):
             # token of the hour — run the whole scan in the BACKGROUND so its network fetch can't
             # stall the loop. Claim the slot up front so we never spawn overlapping scans.
@@ -926,11 +971,19 @@ async def main():
             _BG_TASKS.add(_task)
             _task.add_done_callback(_BG_TASKS.discard)
         if SOAK_CSV:
-            log_csv(SOAK_CSV, pods, t)
+            try:
+                log_csv(SOAK_CSV, pods, t)
+            except OSError as e:
+                print(f"[fleet] soak csv write failed ({e})", flush=True)
         if DRY:
             emit(pods, swarm, t)
-        # rotation runs every cycle: staleness+retire are cheap; the refill self-rate-limits
-        await rotate(pods, swarm, target, auto, n)
+        # rotation runs every cycle: staleness+retire are cheap; the refill self-rate-limits.
+        # Guarded: a selection/API blip during refill must degrade to "try again next cycle",
+        # never kill the loop.
+        try:
+            await rotate(pods, swarm, target, auto, n)
+        except Exception as e:
+            print(f"[fleet] rotate failed ({e}); retrying next cycle", flush=True)
         await asyncio.sleep(POLL)
 
 

@@ -186,6 +186,8 @@ class Watchlist:
         """
         msgs = []
         by_sym = {p.symbol: p for p in pods}
+        # expire old re-list cooldowns so the dict can't grow forever under constant token churn
+        self._cut_recent = {s: ts for s, ts in self._cut_recent.items() if (t - ts) < self.recut_s}
         # 1) prune: listed pools that turned dangerous, or rotated out of the fleet entirely
         for sym in list(self.order):
             pod = by_sym.get(sym)
@@ -208,8 +210,8 @@ class Watchlist:
                 e["streak"] = 0
             if cut:
                 # chart the death: show the candles at the moment it turned
-                msgs.append({"text": self._cut_text(sym, cut, e.get("ca")), "sym": sym,
-                             "addr": e.get("addr"), "chart": "dying"})
+                msgs.append({"kind": "cut", "text": self._cut_text(sym, cut, e.get("ca")),
+                             "sym": sym, "addr": e.get("addr"), "chart": "dying"})
                 self._cut_recent[sym] = t   # keep it off the list for recut_s (no cut-then-relist)
                 self._drop(sym)
         # 2) rebuild the current tradeable set and REPOST when it would change vs what's on the
@@ -239,7 +241,7 @@ class Watchlist:
                 self._posted_order = list(new_syms)
                 self.last_build = t
                 self._said_empty = False
-                item = {"text": self._list_text(entries)}
+                item = {"kind": "list", "text": self._list_text(entries)}
                 if 1 <= len(entries) <= self.chart_list_max:
                     item.update(sym=entries[0]["symbol"], addr=entries[0]["addr"], chart="tradeable")
                 msgs.append(item)
@@ -247,8 +249,14 @@ class Watchlist:
                 self._said_empty = True
                 self._posted_order = []
                 self.last_build = t
-                msgs.append({"text": self._empty_text()})
+                msgs.append({"kind": "empty", "text": self._empty_text()})
         return msgs
+
+    def mark_unsynced(self):
+        """Called when a LIST post failed to deliver: forget what we think is on the channel so
+        the next rebuild (after the normal throttle) reposts even if membership didn't change.
+        Without this, a dropped post desyncs TG until the tradeable set happens to change."""
+        self._posted_order = ["<undelivered>"]  # matches no real membership -> changed=True
 
     def _drop(self, sym):
         self.order = [s for s in self.order if s != sym]
