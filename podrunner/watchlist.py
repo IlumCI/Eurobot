@@ -209,9 +209,11 @@ class Watchlist:
             elif not reason:
                 e["streak"] = 0
             if cut:
-                # chart the death: show the candles at the moment it turned
+                # chart the death: show the candles at the moment it turned. Carry the listing
+                # context out — the ledger scores listing→cut ("how far it fell on our watch").
                 msgs.append({"kind": "cut", "text": self._cut_text(sym, cut, e.get("ca")),
-                             "sym": sym, "addr": e.get("addr"), "chart": "dying", "reason": cut})
+                             "sym": sym, "addr": e.get("addr"), "chart": "dying", "reason": cut,
+                             "list_price": e.get("list_price"), "listed_t": e.get("added_t")})
                 self._cut_recent[sym] = t   # keep it off the list for recut_s (no cut-then-relist)
                 self._drop(sym)
         # 2) rebuild the current tradeable set and REPOST when it would change vs what's on the
@@ -229,6 +231,7 @@ class Watchlist:
             stale = self.last_build is None or (t - self.last_build) >= self.refresh_s
             if entries and (changed or stale):
                 prev = self.listed
+                fresh = []
                 for e in entries:                     # preserve listing memory for already-listed tokens
                     old = prev.get(e["symbol"])
                     if old and "list_price" in old:
@@ -236,12 +239,15 @@ class Watchlist:
                         e["peak_price"], e["streak"] = old.get("peak_price", e["price"]), old.get("streak", 0)
                     else:
                         e.update(added_t=t, list_price=e["price"], peak_price=e["price"], streak=0)
+                        fresh.append(e["symbol"])
                 self.order = new_syms
                 self.listed = {e["symbol"]: e for e in entries}
                 self._posted_order = list(new_syms)
                 self.last_build = t
                 self._said_empty = False
-                item = {"kind": "list", "text": self._list_text(entries)}
+                # new_syms == whole list; "fresh" = first appearance -> the ledger records the
+                # positive call ("tradeable now") once per listing, not on every repost
+                item = {"kind": "list", "text": self._list_text(entries), "new_syms": fresh}
                 if 1 <= len(entries) <= self.chart_list_max:
                     item.update(sym=entries[0]["symbol"], addr=entries[0]["addr"], chart="tradeable")
                 msgs.append(item)

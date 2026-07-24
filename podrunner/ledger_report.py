@@ -17,7 +17,7 @@ def _t(ts):
 
 
 def load(path, since_ts):
-    calls, marks, lists, stables, retires = [], defaultdict(dict), [], [], []
+    calls, marks, lists, stables, retires, listeds = [], defaultdict(dict), [], [], [], []
     with open(path, newline="") as f:
         for r in csv.DictReader(f):
             try:
@@ -37,9 +37,11 @@ def load(path, since_ts):
                 marks[(r["symbol"], r["ref_ts"])][r["horizon_m"]] = r
             elif k == "list":
                 lists.append(r)
+            elif k == "listed":
+                listeds.append(r)
             elif k == "stable":
                 stables.append(r)
-    return calls, marks, lists, stables, retires
+    return calls, marks, lists, stables, retires, listeds
 
 
 def fmt_move(mk, h):
@@ -79,7 +81,7 @@ def main():
     since = time.time() - hours * 3600
     if not path.exists():
         sys.exit(f"no ledger at {path}")
-    calls, marks, lists, stables, retires = load(path, since)
+    calls, marks, lists, stables, retires, listeds = load(path, since)
 
     print(f"VALTGEIST LEDGER REPORT — last {hours:.0f}h (times UTC)")
     print("=" * 64)
@@ -95,7 +97,10 @@ def main():
             kind = "CUT " if c["kind"] == "cut" else "EXIT"
             print(f"  {_t(c['ts'])}  {kind} {c['symbol']:<14} {v:<10}"
                   f" 5m:{fmt_move(mk, 5)}  15m:{fmt_move(mk, 15)}  60m:{fmt_move(mk, 60)}")
-            print(f"         └ {(c.get('detail') or '')[:70]}  @ {c.get('price', '?')}")
+            # a cut row carrying move_pct = what it did between LISTING and the cut —
+            # the flagged move itself, and the number worth putting in a receipt
+            on_watch = f"listed→cut: {float(c['move_pct']):+.1f}% · " if c.get("move_pct") else ""
+            print(f"         └ {on_watch}{(c.get('detail') or '')[:70]}  @ {c.get('price', '?')}")
         if judged:
             hits = sum(1 for m in judged if m <= -2)
             med = sorted(judged)[len(judged) // 2]
@@ -103,6 +108,25 @@ def main():
                   f"median 15m move after call: {med:+.1f}%")
     else:
         print("\nCALLS: none in window.")
+
+    if listeds:
+        held, lj = 0, []
+        print(f"\nLISTED AS TRADEABLE ({len(listeds)}) — did they hold after we said calm?")
+        for c in sorted(listeds, key=lambda r: float(r["ts"])):
+            mk = marks.get((c["symbol"], f"{float(c['ts']):.0f}"), {})
+            r15 = mk.get("15") or mk.get("5")
+            if not r15 or r15.get("detail") == "no-price":
+                v = "…"
+            else:
+                mv = float(r15["move_pct"])
+                lj.append(mv)
+                v = "📈 rose" if mv >= 2 else ("❌ dumped" if mv <= -2 else "✅ held")
+                held += mv > -2
+            print(f"  {_t(c['ts'])}  LIST {c['symbol']:<14} {v:<10}"
+                  f" 5m:{fmt_move(mk, 5)}  15m:{fmt_move(mk, 15)}  60m:{fmt_move(mk, 60)}")
+        if lj:
+            med = sorted(lj)[len(lj) // 2]
+            print(f"\n  held or rose (15m): {held}/{len(lj)} · median 15m move after listing: {med:+.1f}%")
 
     if retires:
         why = defaultdict(int)

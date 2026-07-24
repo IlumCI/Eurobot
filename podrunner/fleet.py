@@ -990,9 +990,18 @@ async def main():
                                 item.get("sym", "?"), item.get("reason", ""),
                                 (cp.state.get("price") if cp else None),
                                 getattr(cp, "base_mint", None),
-                                getattr(cp, "base_mint", None), getattr(cp, "quote_mint", None))
+                                getattr(cp, "base_mint", None), getattr(cp, "quote_mint", None),
+                                list_price=item.get("list_price"), listed_t=item.get("listed_t"))
                         elif item.get("kind") == "list":
                             LEDGER.record_list(WATCH.order)
+                            # each FIRST appearance is a positive call — mark it like a cut
+                            for sym in item.get("new_syms", ()):
+                                lp = next((p for p in pods if p.symbol == sym), None)
+                                e = WATCH.listed.get(sym) or {}
+                                LEDGER.record_listed(
+                                    sym, e.get("list_price"),
+                                    getattr(lp, "base_mint", None),
+                                    getattr(lp, "base_mint", None), getattr(lp, "quote_mint", None))
                     ok = await asyncio.to_thread(_deliver, item, WATCH.notifier, "watch")
                     if not ok and WATCH.notifier.live and item.get("kind") in ("list", "empty"):
                         WATCH.mark_unsynced()

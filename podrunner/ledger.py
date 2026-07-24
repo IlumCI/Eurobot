@@ -79,10 +79,33 @@ class Ledger:
         self._recalc_due()
 
     # ------------------------------------------------------------------ recording (loop thread)
-    def record_cut(self, sym, reason, price, ca, base_mint=None, quote_mint=None):
+    def record_cut(self, sym, reason, price, ca, base_mint=None, quote_mint=None,
+                   list_price=None, listed_t=None):
+        """A public CUT call. When the listing context is known, the row also carries
+        listing→cut: ref_ts = when we listed it, move_pct = % move while it was on the list.
+        That's the number that matters — the post-cut marks mostly measure the bounce,
+        because a cut fires AFTER the cascade."""
+        now = time.time()
+        ref, move = "", ""
+        try:
+            if list_price and price and float(list_price) > 0:
+                move = f"{(float(price) / float(list_price) - 1.0) * 100.0:+.2f}"
+                ref = f"{float(listed_t):.0f}" if listed_t else ""
+        except (TypeError, ValueError):
+            pass
+        with self._lock:
+            self._row("cut", sym, reason, price or "", ca, ref_ts=ref, move_pct=move, ts=now)
+            try:
+                self._schedule_marks(now, sym, ca, base_mint, quote_mint, float(price or 0))
+            except (TypeError, ValueError):
+                pass
+
+    def record_listed(self, sym, price, ca, base_mint=None, quote_mint=None):
+        """A token newly POSTED as tradeable — the positive call. Gets the same +5/15/60m
+        marks: did it actually hold/rise after we said 'calm enough to trade'?"""
         now = time.time()
         with self._lock:
-            self._row("cut", sym, reason, price or "", ca, ts=now)
+            self._row("listed", sym, "", price or "", ca, ts=now)
             try:
                 self._schedule_marks(now, sym, ca, base_mint, quote_mint, float(price or 0))
             except (TypeError, ValueError):
@@ -167,26 +190,35 @@ if __name__ == "__main__":
     import tempfile
     d = tempfile.mkdtemp()
     led = Ledger(Path(d) / "ledger.csv")
-    led.record_cut("KET-SOL", "toxic sell flow (vpin 0.97)", 0.0123, "KETca", "mintB", "mintQ")
+    led.record_cut("KET-SOL", "toxic sell flow (vpin 0.97)", 0.0123, "KETca", "mintB", "mintQ",
+                   list_price=0.015, listed_t=time.time() - 3600)
     led.record_list(["A-SOL", "B-SOL"])
+    led.record_listed("A-SOL", 2.0, "Aca", "mintA", "mintQ")
     led.record_stable("JUP-SOL", "24h +3%", 1.23, "JUPca")
     led.record_retire("BOP-SOL", "toxic-flow vpin=0.98 imb=-0.31", 0.5, "BOPca", "mintB2", "mintQ")
-    assert len(led.pending) == 6  # 3 horizons x (1 cut + 1 toxic retire)
+    assert len(led.pending) == 9  # 3 horizons x (1 cut + 1 listing + 1 toxic retire)
     assert not led.due_now(time.time())
 
     fake_now = time.time() + 16 * 60  # +16min: the 5m and 15m marks are due, 60m not yet
     assert led.due_now(fake_now)
-    n = led.poll(now=fake_now, price_fn=lambda mints: {"mintB": 0.9, "mintB2": 0.6, "mintQ": 100.0})
-    assert n == 4, n                      # 2 tokens x 2 horizons resolved
-    assert len(led.pending) == 2          # the two 60m marks remain
+    n = led.poll(now=fake_now, price_fn=lambda mints: {"mintB": 0.9, "mintB2": 0.6,
+                                                       "mintA": 2.2, "mintQ": 100.0})
+    assert n == 6, n                      # 3 calls x 2 horizons resolved
+    assert len(led.pending) == 3          # the three 60m marks remain
 
     rows = list(csv.reader(open(led.path)))
     kinds = [r[1] for r in rows[1:]]
-    assert kinds.count("mark") == 4 and "cut" in kinds and "retire" in kinds
+    assert kinds.count("mark") == 6 and "cut" in kinds and "retire" in kinds and "listed" in kinds
     # KET called at 0.0123, marked at 0.9/100 = 0.009 -> about -26.8%
     ket = [r for r in rows if r[1] == "mark" and r[2] == "KET-SOL"][0]
     assert ket[8].startswith("-26."), ket
+    # the cut row itself carries the listing→cut move: listed 0.015 -> cut 0.0123 = -18%
+    cut = [r for r in rows if r[1] == "cut"][0]
+    assert cut[8].startswith("-18.") and cut[6], cut
+    # listed rows get marks too: A listed at native 2.0, marked at 2.2/100 = 0.022 -> -98.9%
+    a = [r for r in rows if r[1] == "mark" and r[2] == "A-SOL"][0]
+    assert a[8].startswith("-98."), a
     # restart survival: a new Ledger on the same path reloads pending marks
     led2 = Ledger(led.path)
-    assert len(led2.pending) == 2
+    assert len(led2.pending) == 3
     print("ledger self-test OK")
