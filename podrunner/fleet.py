@@ -106,6 +106,14 @@ LEDGER_ON = os.environ.get("LEDGER", "1") == "1"
 # DAILY RECEIPTS scoreboard — posted once per UTC day at SCOREBOARD_UTC_H. SCOREBOARD=0 disables.
 SCOREBOARD_ON = os.environ.get("SCOREBOARD", "1") == "1"
 SCORE_UTC_H = int(os.environ.get("SCOREBOARD_UTC_H", "8"))
+# PRO tier — a second (private, paid) channel that gets every cut/list INSTANTLY and text-only;
+# the free channel gets the identical post FREE_DELAY_S later, stamped with how late it is.
+# The product is the head start; the stamp on every free post is the ad. Off until
+# PREMIUM_CHAT_ID is set (same bot, must be admin in both channels).
+PREMIUM_CHAT = os.environ.get("PREMIUM_CHAT_ID", "").strip()
+FREE_DELAY_S = float(os.environ.get("FREE_DELAY_S", "75"))
+PRO_TAGLINE = os.environ.get("PRO_TAGLINE", "⚡ PRO members got this {d}s ago — valtgeist.trade")
+PREMIUM = None  # set in main() when PREMIUM_CHAT is configured
 LEDGER = None  # set in main()
 # Per-cycle decay of a pod's "recent heat" (rolling max of its Hawkes ratio). Lets the watchlist
 # tell a token cooling down AFTER a dump (recently hot, now calm = 'stabilising') from one heating
@@ -155,6 +163,21 @@ def _deliver(item, notifier, tag="watch"):
 
 
 _BG_TASKS = set()  # keep strong refs so background tasks aren't GC'd mid-flight
+
+
+async def _delayed_free(item, notifier, delay_s):
+    """The free-channel copy of a PRO-first post: identical content, delay_s later, stamped
+    with how late it is (every free post advertises the head start). A failed delayed LIST
+    still marks the channel unsynced so the next rebuild reposts."""
+    try:
+        await asyncio.sleep(delay_s)
+        stamped = dict(item)
+        stamped["text"] = item["text"] + "\n\n" + PRO_TAGLINE.format(d=int(delay_s))
+        ok = await asyncio.to_thread(_deliver, stamped, notifier, "watch")
+        if not ok and notifier.live and item.get("kind") in ("list", "empty") and WATCH is not None:
+            WATCH.mark_unsynced()
+    except Exception as e:
+        print(f"[fleet] delayed free post failed ({e})", flush=True)
 
 
 async def _stable_task(t, exclude):
@@ -907,6 +930,12 @@ async def main():
         WATCH = Watchlist()
         print(f"[fleet] watchlist ON, refresh ~{WATCH.refresh_s / 3600:.1f}h "
               f"({'telegram' if WATCH.notifier.live else 'console only — set TELEGRAM_*'})", flush=True)
+        if PREMIUM_CHAT:
+            global PREMIUM
+            from alerts import AlertBook
+            PREMIUM = AlertBook(chat_id=PREMIUM_CHAT)
+            print(f"[fleet] PRO channel ON — cuts/lists instant there, "
+                  f"free channel delayed {FREE_DELAY_S:.0f}s", flush=True)
     if STABLE:
         global STABLEPICK
         from stable_pick import StablePick
@@ -1032,9 +1061,20 @@ async def main():
                                     sym, e.get("list_price"),
                                     getattr(lp, "base_mint", None),
                                     getattr(lp, "base_mint", None), getattr(lp, "quote_mint", None))
-                    ok = await asyncio.to_thread(_deliver, item, WATCH.notifier, "watch")
-                    if not ok and WATCH.notifier.live and item.get("kind") in ("list", "empty"):
-                        WATCH.mark_unsynced()
+                    if PREMIUM is not None and item.get("kind") in ("cut", "list"):
+                        # PRO first: text-only (no chart render on the hot path), right now;
+                        # the free copy follows FREE_DELAY_S later from a background task.
+                        pro = dict(item)
+                        pro.pop("chart", None)
+                        await asyncio.to_thread(_deliver, pro, PREMIUM, "pro")
+                        _task = asyncio.create_task(
+                            _delayed_free(item, WATCH.notifier, FREE_DELAY_S))
+                        _BG_TASKS.add(_task)
+                        _task.add_done_callback(_BG_TASKS.discard)
+                    else:
+                        ok = await asyncio.to_thread(_deliver, item, WATCH.notifier, "watch")
+                        if not ok and WATCH.notifier.live and item.get("kind") in ("list", "empty"):
+                            WATCH.mark_unsynced()
             except Exception as e:
                 print(f"[fleet] watchlist pass failed ({e})", flush=True)
         if LEDGER is not None and LEDGER.due_now():
@@ -1054,6 +1094,8 @@ async def main():
                     txt = await asyncio.to_thread(scoreboard_text, LEDGER.path, 24.0)
                     if txt:
                         await asyncio.to_thread(WATCH.notifier.post, txt, "receipts")
+                        if PREMIUM is not None:
+                            await asyncio.to_thread(PREMIUM.post, txt, "receipts")
                 except Exception as e:
                     print(f"[fleet] scoreboard failed ({e})", flush=True)
         if STABLEPICK is not None and STABLEPICK.due(t):

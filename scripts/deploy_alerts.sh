@@ -39,6 +39,12 @@ TELEGRAM_CHAT_ID=
 # --- product: the degen watchlist (charts on single-lists + every CUT) ---
 WATCHLIST=1
 CHARTS=1
+# --- PRO tier: set to the private paid channel's chat id (-100…) to turn it on.
+# PRO gets cuts/lists instantly (text-only); the free channel gets them FREE_DELAY_S
+# later, stamped. TRADE_REF = your referral code from Trojan/BONKbot.
+#PREMIUM_CHAT_ID=
+#FREE_DELAY_S=75
+#TRADE_REF=
 # raw per-signal firehose off by default (WATCHLIST is the curated product)
 ALERTS=0
 WS_FEED=1
