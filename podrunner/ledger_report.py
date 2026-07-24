@@ -64,12 +64,18 @@ def verdict(mk):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    path = Path(args[0]) if args else Path(__file__).resolve().parent / "ledger.csv"
     hours = 12.0
-    for i, a in enumerate(sys.argv):
+    positional, skip = [], False
+    for i, a in enumerate(sys.argv[1:], 1):
+        if skip:
+            skip = False
+            continue
         if a == "--hours" and i + 1 < len(sys.argv):
             hours = float(sys.argv[i + 1])
+            skip = True
+        elif not a.startswith("--"):
+            positional.append(a)
+    path = Path(positional[0]) if positional else Path(__file__).resolve().parent / "ledger.csv"
     since = time.time() - hours * 3600
     if not path.exists():
         sys.exit(f"no ledger at {path}")

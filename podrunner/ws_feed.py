@@ -190,6 +190,7 @@ class WsVaultFeed:
         subscribed = set()
         seen_gen = -1
         next_id = 1
+        bad_frames = 0
         while True:
             # (re)subscribe any vaults added since last check — rotation-friendly
             with self._lock:
@@ -224,22 +225,31 @@ class WsVaultFeed:
             except asyncio.TimeoutError:
                 continue
             self.messages += 1
-            if "id" in msg and msg["id"] in sub_ids:          # subscribe confirmation
-                if "result" in msg:
-                    vault = sub_ids[msg["id"]]
-                    if vault in subscribed:
-                        sub_map[msg["result"]] = vault
-                        vault_sub[vault] = msg["result"]
-                    else:
-                        # confirmation for a vault we already dropped -> unsubscribe right away
-                        await ws.send(json.dumps({
-                            "jsonrpc": "2.0", "id": next_id,
-                            "method": "accountUnsubscribe", "params": [msg["result"]],
-                        }))
-                        next_id += 1
-            elif msg.get("method") == "accountNotification":
-                pr = msg["params"]
-                vault = sub_map.get(pr["subscription"])
-                if vault:
-                    val = pr["result"]["value"]
-                    self._apply(vault, val["data"][0], pr["result"]["context"]["slot"], source)
+            # one malformed/unexpected frame must NOT kill the socket — tearing down the
+            # session on a stray KeyError meant reconnect+resubscribe churn all night
+            # (api.mainnet-beta sends odd frames under throttling). Skip the frame, log rarely.
+            try:
+                if "id" in msg and msg["id"] in sub_ids:          # subscribe confirmation
+                    if "result" in msg:
+                        vault = sub_ids[msg["id"]]
+                        if vault in subscribed:
+                            sub_map[msg["result"]] = vault
+                            vault_sub[vault] = msg["result"]
+                        else:
+                            # confirmation for a vault we already dropped -> unsubscribe right away
+                            await ws.send(json.dumps({
+                                "jsonrpc": "2.0", "id": next_id,
+                                "method": "accountUnsubscribe", "params": [msg["result"]],
+                            }))
+                            next_id += 1
+                elif msg.get("method") == "accountNotification":
+                    pr = msg["params"]
+                    vault = sub_map.get(pr["subscription"])
+                    if vault:
+                        val = pr["result"]["value"]
+                        self._apply(vault, val["data"][0], pr["result"]["context"]["slot"], source)
+            except (KeyError, TypeError, IndexError) as e:
+                bad_frames += 1
+                if bad_frames == 1 or bad_frames % 100 == 0:
+                    print(f"[ws-feed] {source}: bad frame #{bad_frames} "
+                          f"({type(e).__name__} {e}): {str(msg)[:160]}", flush=True)

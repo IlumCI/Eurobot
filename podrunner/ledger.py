@@ -33,6 +33,7 @@ class Ledger:
         self._lock = threading.Lock()
         self.pending = []          # [{due, ref_ts, sym, ca, base_mint, quote_mint, price0, horizon_m}]
         self._next_due = None
+        self._fail_until = 0.0     # backoff gate after a failed price poll (no 3s hammering)
         if not self.path.exists():
             try:
                 with open(self.path, "w", newline="") as f:
@@ -110,24 +111,40 @@ class Ledger:
     # ------------------------------------------------------------------ follow-ups (worker thread)
     def due_now(self, now=None):
         now = now or time.time()
-        return self._next_due is not None and now >= self._next_due
+        return self._next_due is not None and now >= self._next_due and now >= self._fail_until
 
     def poll(self, now=None, price_fn=None):
         """Resolve due marks with ONE batched price call. price_fn(mints)->{mint: usd} is
-        injectable for tests; defaults to Jupiter."""
+        injectable for tests; defaults to Jupiter.
+
+        A failed/empty price call sets a 60s backoff gate — retrying every loop cycle
+        while rate-limited just keeps the limit tripped (this killed all marks for 8h
+        on the first live night)."""
         now = now or time.time()
         with self._lock:
             due = [p for p in self.pending if p["due"] <= now]
             if not due:
                 return 0
         if price_fn is None:
-            from live_feed import jupiter_usd_prices
-            price_fn = jupiter_usd_prices
+            # not jupiter_usd_prices: that helper swallows HTTP errors into {}, and here we
+            # WANT the 429/timeout in the log — it's the only place rate-limiting is visible
+            from live_feed import JUP_URL, _get_json
+
+            def price_fn(ms):
+                data = _get_json(JUP_URL.format(",".join(m for m in ms if m)), 15)
+                return {k: (v or {}).get("usdPrice") for k, v in data.items() if isinstance(v, dict)}
         mints = sorted({m for p in due for m in (p["base_mint"], p["quote_mint"])})
+        usd, err = {}, None
         try:
-            usd = price_fn(mints) or {}
-        except Exception:
-            usd = {}
+            # Jupiter caps ids per request; chunk so a big backlog can't produce a 4xx
+            for i in range(0, len(mints), 50):
+                usd.update(price_fn(mints[i:i + 50]) or {})
+        except Exception as exc:
+            err = exc
+        if not usd:
+            why = f"{type(err).__name__}: {err}" if err else "no prices returned"
+            print(f"[ledger] price poll failed ({why}) — backing off 60s", flush=True)
+            self._fail_until = now + 60.0
         resolved = 0
         with self._lock:
             for p in due:
