@@ -45,7 +45,7 @@ sys.path.insert(0, str(REPO / "research"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import phoenix_lp_sim as sim  # noqa: E402
-from live_feed import LiveFeed, jupiter_usd_prices  # noqa: E402
+from live_feed import LiveFeed, usd_prices  # noqa: E402
 from latency import LatencyModel  # noqa: E402
 from flow_metrics import FlowMeter  # noqa: E402
 
@@ -725,9 +725,10 @@ def log_csv(path, pods, t):
 
 
 def batch_prices(pods):
-    """One Jupiter call for the whole book: {mint: usdPrice} for every base+quote mint."""
+    """One batched call for the whole book: {mint: usd} for every base+quote mint.
+    Multi-source under the hood (Jupiter → DexScreener → GeckoTerminal)."""
     mints = {m for p in pods for m in (p.base_mint, p.quote_mint) if m}
-    return jupiter_usd_prices(sorted(mints))
+    return usd_prices(sorted(mints))
 
 
 async def rotate(pods, swarm, target, auto, now):
@@ -895,12 +896,14 @@ async def main():
         if pods:
             # one batched Jupiter call for the whole book; per-pod fetch only for misses
             usdmap = await asyncio.to_thread(batch_prices, pods)
+            batch_src = getattr(usd_prices, "last_src", "jup")
             fallbacks = []
             for p in pods:
                 b, q = usdmap.get(p.base_mint), usdmap.get(p.quote_mint)
                 if b and q and q > 0:
                     price = b / q
                     p.price, p.path.price, p.quote_usd = price, price, q
+                    p.price_src = batch_src
                 else:
                     fallbacks.append(p)
             if fallbacks:
@@ -909,6 +912,7 @@ async def main():
                 for p, info in zip(fallbacks, infos):
                     if not isinstance(info, Exception):
                         p.apply_price(info)
+                        p.price_src = "fb"  # per-pool fallback path (router + DexScreener pair)
             # Live ws layer on top of the Jupiter base: fresher CPMM prices override, and
             # every pod's REAL trade flow feeds its VPIN meter + the controller's Hawkes
             # (sell-side arrivals only — it is a SELL-cascade detector, not an activity meter).
@@ -918,7 +922,8 @@ async def main():
                     if not p.ws:
                         continue
                     try:
-                        p.price_src = "jup"
+                        # price_src already labelled by the batch/fallback pass this tick;
+                        # only override when a fresh ws price actually wins
                         lt = WSF.latest(p.symbol)
                         if lt and p.ws_price_ok and lt[0] and lt[2] <= WS_MAX_AGE_MS:
                             p.price = p.path.price = lt[0]

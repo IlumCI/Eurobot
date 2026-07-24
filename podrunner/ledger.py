@@ -126,23 +126,18 @@ class Ledger:
             if not due:
                 return 0
         if price_fn is None:
-            # not jupiter_usd_prices: that helper swallows HTTP errors into {}, and here we
-            # WANT the 429/timeout in the log — it's the only place rate-limiting is visible
-            from live_feed import JUP_URL, _get_json
-
-            def price_fn(ms):
-                data = _get_json(JUP_URL.format(",".join(m for m in ms if m)), 15)
-                return {k: (v or {}).get("usdPrice") for k, v in data.items() if isinstance(v, dict)}
+            # multi-source router: Jupiter → DexScreener → GeckoTerminal, with per-source
+            # rest windows and its own failure logging (chunking handled inside)
+            from live_feed import usd_prices
+            price_fn = usd_prices
         mints = sorted({m for p in due for m in (p["base_mint"], p["quote_mint"])})
         usd, err = {}, None
         try:
-            # Jupiter caps ids per request; chunk so a big backlog can't produce a 4xx
-            for i in range(0, len(mints), 50):
-                usd.update(price_fn(mints[i:i + 50]) or {})
+            usd = price_fn(mints) or {}
         except Exception as exc:
             err = exc
         if not usd:
-            why = f"{type(err).__name__}: {err}" if err else "no prices returned"
+            why = f"{type(err).__name__}: {err}" if err else "no source returned prices"
             print(f"[ledger] price poll failed ({why}) — backing off 60s", flush=True)
             self._fail_until = now + 60.0
         resolved = 0
