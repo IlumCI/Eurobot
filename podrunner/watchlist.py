@@ -87,7 +87,9 @@ class Watchlist:
         self.grace_s = _f(grace_s, "WL_GRACE_S", "90")
         self.danger_cycles = int(danger_cycles if danger_cycles is not None
                                  else os.environ.get("WL_DANGER_CYCLES", "3"))
-        self.min_rebuild_s = _f(min_rebuild_s, "WL_MIN_REBUILD_S", "180")
+        # 15 min floor between reposts: "fewer calls, explained" reads as conviction;
+        # a list that repaints every 3 minutes reads as noise (cuts still fire instantly)
+        self.min_rebuild_s = _f(min_rebuild_s, "WL_MIN_REBUILD_S", "900")
         # attach a candle chart when the list is this short (>=1) — a big list would be many images
         self.chart_list_max = int(os.environ.get("WL_CHART_LIST_MAX", "1"))
         self.warm_n = _f(None, "WL_WARM_N", "0.20")        # n above this (but listed) = 🟡 warming
@@ -246,8 +248,11 @@ class Watchlist:
                 self.last_build = t
                 self._said_empty = False
                 # new_syms == whole list; "fresh" = first appearance -> the ledger records the
-                # positive call ("tradeable now") once per listing, not on every repost
-                item = {"kind": "list", "text": self._list_text(entries), "new_syms": fresh}
+                # positive call ("tradeable now") once per listing, not on every repost.
+                # btn_*: the top pick, for the trade/chart buttons under the post.
+                item = {"kind": "list", "text": self._list_text(entries), "new_syms": fresh,
+                        "btn_sym": entries[0]["symbol"], "btn_ca": entries[0].get("ca"),
+                        "btn_addr": entries[0].get("addr")}
                 if 1 <= len(entries) <= self.chart_list_max:
                     item.update(sym=entries[0]["symbol"], addr=entries[0]["addr"], chart="tradeable")
                 msgs.append(item)
@@ -280,10 +285,16 @@ class Watchlist:
                 buy = round((1 + max(-1.0, min(1.0, imb))) * 50)
                 lean = "balanced" if abs(imb) < 0.1 else ("buy-leaning" if imb > 0 else "sell-leaning")
                 flow_line = f"\n• flow:      {buy}% buy / {100 - buy}% sell ({lean})"
+            since_line = ""
+            lp, px = e.get("list_price"), e.get("price")
+            if lp and px and lp > 0:                # repost: show how it's done since we called it
+                mv = (px / lp - 1.0) * 100.0
+                if abs(mv) >= 0.5:
+                    since_line = f"\n• since list: {mv:+.1f}%"
             blocks.append(
                 f"${_base(e['symbol'])} — {self._status(e)}\n"
                 f"• mcap:      {_money(e['mcap'])}\n"
-                f"• price:     {_fmt_price(e['price'])}\n"
+                f"• price:     {_fmt_price(e['price'])}{since_line}\n"
                 f"• liquidity: {_money(e['liq'])}\n"
                 f"• 1h move:   {e['vol_h1']:.0f}%\n"
                 f"• turnover:  {e['turnover']:.1f}x/day\n"

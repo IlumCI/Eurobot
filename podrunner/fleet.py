@@ -103,6 +103,9 @@ HEARTBEAT_FILE = os.environ.get("HEARTBEAT_FILE", "/run/valtgeist-alerts.heartbe
 # Track-record ledger: every public call (CUT/list/stable) + fleet exits, with +5/15/60min
 # follow-up marks — the verifiable "we called it" record. LEDGER=0 disables.
 LEDGER_ON = os.environ.get("LEDGER", "1") == "1"
+# DAILY RECEIPTS scoreboard — posted once per UTC day at SCOREBOARD_UTC_H. SCOREBOARD=0 disables.
+SCOREBOARD_ON = os.environ.get("SCOREBOARD", "1") == "1"
+SCORE_UTC_H = int(os.environ.get("SCOREBOARD_UTC_H", "8"))
 LEDGER = None  # set in main()
 # Per-cycle decay of a pod's "recent heat" (rolling max of its Hawkes ratio). Lets the watchlist
 # tell a token cooling down AFTER a dump (recently hot, now calm = 'stabilising') from one heating
@@ -110,19 +113,45 @@ LEDGER = None  # set in main()
 HEAT_DECAY = float(os.environ.get("HEAT_DECAY", "0.997"))
 
 
+# Trade buttons: referral deep-links into the big execution bots. Signals people can't act on
+# in one tap don't convert; referral fee-shares are revenue with zero custody. Set TRADE_REF to
+# YOUR referral code from each bot (defaults open the bot without credit until you do).
+TRADE_BUTTONS = os.environ.get("TRADE_BUTTONS", "1") == "1"
+TRADE_REF = os.environ.get("TRADE_REF", "valtgeist")
+
+
+def _post_buttons(item):
+    """Inline keyboard for a post: trade buttons ONLY on 'tradeable' lists (never on cuts —
+    that's a get-out call — and never on the explicitly not-a-buy-call stable pick); a
+    DexScreener chart link whenever we know the pool."""
+    row = []
+    ca, sym = item.get("btn_ca"), item.get("btn_sym") or ""
+    if TRADE_BUTTONS and item.get("kind") == "list" and ca:
+        s = sym.split("-")[0]
+        row += [{"text": f"⚡ ${s} on Trojan",
+                 "url": f"https://t.me/solana_trojanbot?start=r-{TRADE_REF}-{ca}"},
+                {"text": "🐶 BONKbot",
+                 "url": f"https://t.me/bonkbot_bot?start=ref_{TRADE_REF}_ca_{ca}"}]
+    addr = item.get("btn_addr") or item.get("addr")
+    if addr:
+        row.append({"text": "📈 chart", "url": f"https://dexscreener.com/solana/{addr}"})
+    return [row] if row else None
+
+
 def _deliver(item, notifier, tag="watch"):
     """Post one item off the event loop: chart+caption if asked, else plain text.
     Returns True if Telegram accepted it (False also covers console-only mode)."""
     text = item["text"]
+    btns = _post_buttons(item)
     if CHARTS and item.get("chart") and item.get("addr"):
         try:
             import chart_render
             png = chart_render.chart_png(item["addr"], item.get("sym"), item["chart"])
         except Exception:
             png = None
-        if png and notifier.post_photo(png, text, tag):
+        if png and notifier.post_photo(png, text, tag, buttons=btns):
             return True
-    return notifier.post(text, tag)
+    return notifier.post(text, tag, buttons=btns)
 
 
 _BG_TASKS = set()  # keep strong refs so background tasks aren't GC'd mid-flight
@@ -892,6 +921,7 @@ async def main():
     auto = not explicit
     target = len(pods)  # hold the fleet at the size it successfully armed
     n = 0
+    score_day = None   # yday of the last DAILY RECEIPTS post (once per UTC day)
     while True:
         if pods:
             # one batched Jupiter call for the whole book; per-pod fetch only for misses
@@ -1013,6 +1043,19 @@ async def main():
                 await asyncio.to_thread(LEDGER.poll)
             except Exception as e:
                 print(f"[fleet] ledger poll failed ({e})", flush=True)
+        if SCOREBOARD_ON and LEDGER is not None and WATCH is not None:
+            # DAILY RECEIPTS: once per UTC day, the last 24h of judged calls — misses included.
+            # The transparency post is the credibility engine; it goes out even on a bad day.
+            tm = time.gmtime()
+            if tm.tm_hour == SCORE_UTC_H and score_day != tm.tm_yday:
+                score_day = tm.tm_yday
+                try:
+                    from ledger_report import scoreboard_text
+                    txt = await asyncio.to_thread(scoreboard_text, LEDGER.path, 24.0)
+                    if txt:
+                        await asyncio.to_thread(WATCH.notifier.post, txt, "receipts")
+                except Exception as e:
+                    print(f"[fleet] scoreboard failed ({e})", flush=True)
         if STABLEPICK is not None and STABLEPICK.due(t):
             # token of the hour — run the whole scan in the BACKGROUND so its network fetch can't
             # stall the loop. Claim the slot up front so we never spawn overlapping scans.

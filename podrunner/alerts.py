@@ -204,25 +204,29 @@ class AlertBook:
             out.append(cur)
         return out
 
-    def post(self, text, tag="alert"):
+    def post(self, text, tag="alert", buttons=None):
         """Print + POST raw text to Telegram if configured. Never raises. Returns delivered?
 
         The shared delivery path — both single alerts (send) and the watchlist post through here.
         Long texts are split at block boundaries (Telegram hard-caps messages at 4096 chars —
         a full 10-entry watchlist with CA lines can exceed it, and would otherwise be dropped).
+        `buttons` is inline_keyboard rows ([[{text, url}, …]]) — attached to the LAST chunk so
+        they always sit at the bottom of the post.
         """
         first = text.splitlines()[0] if text else ""
         print(f"[{tag}] {first}", flush=True)
         if not self.live:
             return False
         ok = True
-        for chunk in self._chunks(text, self.TEXT_MAX - 16):
-            ok = self._api("sendMessage", {
-                "chat_id": self.chat_id, "text": chunk, "disable_web_page_preview": True,
-            }, tag) and ok
+        chunks = self._chunks(text, self.TEXT_MAX - 16)
+        for i, chunk in enumerate(chunks):
+            payload = {"chat_id": self.chat_id, "text": chunk, "disable_web_page_preview": True}
+            if buttons and i == len(chunks) - 1:
+                payload["reply_markup"] = {"inline_keyboard": buttons}
+            ok = self._api("sendMessage", payload, tag) and ok
         return ok
 
-    def post_photo(self, png, caption, tag="alert"):
+    def post_photo(self, png, caption, tag="alert", buttons=None):
         """POST a PNG with caption via sendPhoto (multipart). Never raises. Returns delivered?
 
         Returns False when not live or no image — the caller then falls back to a text post.
@@ -237,8 +241,11 @@ class AlertBook:
             caption = caption[:self.CAPTION_MAX - 1] + "…"
         try:
             boundary = "valtgeistFormBoundary7MA4YWxkTrZu0gW"
+            fields = [("chat_id", str(self.chat_id)), ("caption", caption)]
+            if buttons:
+                fields.append(("reply_markup", json.dumps({"inline_keyboard": buttons})))
             body = b""
-            for name, value in (("chat_id", str(self.chat_id)), ("caption", caption)):
+            for name, value in fields:
                 body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n"
                          f"{value}\r\n").encode()
             body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"photo\"; "

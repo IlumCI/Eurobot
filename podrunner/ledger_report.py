@@ -65,6 +65,61 @@ def verdict(mk):
     return "≈ flat", mv
 
 
+def scoreboard_text(path, hours=24.0):
+    """Degen-facing DAILY RECEIPTS post, straight from the ledger. Every judged call counted,
+    bounces included — the honesty IS the product. Returns None when there's nothing to show."""
+    try:
+        calls, marks, lists, stables, retires, listeds = load(path, time.time() - hours * 3600)
+    except OSError:
+        return None
+
+    def base(sym):
+        return sym.split("-")[0]
+
+    judged = []
+    for c in calls:
+        mk = marks.get((c["symbol"], f"{float(c['ts']):.0f}"), {})
+        _, mv = verdict(mk)
+        if mv is not None:
+            judged.append((c["symbol"], mv))
+    lj = []
+    for c in listeds:
+        mk = marks.get((c["symbol"], f"{float(c['ts']):.0f}"), {})
+        r = mk.get("15") or mk.get("5")
+        if r and r.get("detail") != "no-price":
+            lj.append(float(r["move_pct"]))
+    if not judged and not lj:
+        return None
+
+    lines = [f"📊 DAILY RECEIPTS — last {hours:.0f}h, every call counted (misses too)", ""]
+    if judged:
+        drops = [m for _, m in judged if m <= -2]
+        bounces = [m for _, m in judged if m >= 2]
+        med = sorted(m for _, m in judged)[len(judged) // 2]
+        lines += [f"☠️ exit calls judged: {len(judged)}",
+                  f"• kept dumping after we called it: {len(drops)}",
+                  f"• bounced on us: {len(bounces)}  ← yes, we post those too",
+                  f"• median move 15min after call: {med:+.1f}%"]
+        best = min(judged, key=lambda x: x[1])
+        if best[1] <= -2:
+            lines.append(f"• best call: ${base(best[0])} {best[1]:+.1f}% after we said get out")
+        worst = max(judged, key=lambda x: x[1])
+        if worst[1] >= 2:
+            lines.append(f"• worst miss: ${base(worst[0])} {worst[1]:+.1f}% (we own it)")
+        lines.append("")
+    if lj:
+        held = sum(1 for m in lj if m > -2)
+        lines.append(f"🎯 tokens we listed as tradeable: {len(lj)} judged · "
+                     f"{held}/{len(lj)} held or rose 15min later")
+    caught = [float(c["move_pct"]) for c in calls
+              if c["kind"] == "cut" and c.get("move_pct")]
+    if caught and min(caught) <= -2:
+        lines.append(f"📉 biggest dump caught on-watch: {min(caught):+.1f}% (listed → cut call)")
+    lines += ["", "auto-posted from the append-only ledger. nothing deleted, ever.",
+              "⚠️ not advice — track record, not a promise. dyor."]
+    return "\n".join(lines)
+
+
 def main():
     hours = 12.0
     positional, skip = [], False
