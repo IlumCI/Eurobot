@@ -92,9 +92,12 @@ class Watchlist:
         self.chart_list_max = int(os.environ.get("WL_CHART_LIST_MAX", "1"))
         self.warm_n = _f(None, "WL_WARM_N", "0.20")        # n above this (but listed) = 🟡 warming
         self.stab_heat = _f(None, "WL_STABILISING_HEAT", "0.50")  # recent heat above this = 🟠 stabilising
-        self.order = []      # symbols, in rank order
-        self.listed = {}     # symbol -> entry dict (with added_t / list_price / peak_price / streak)
-        self.last_build = None
+        self.recut_s = _f(None, "WL_RECUT_S", "600")       # don't re-list a token within this of cutting it
+        self.order = []          # symbols currently listed, in rank order
+        self.listed = {}         # symbol -> entry dict (with added_t / list_price / peak_price / streak)
+        self._posted_order = []  # symbols in the LAST POSTED list — repost when this would change
+        self._cut_recent = {}    # symbol -> t it was cut, so we don't re-list it right after
+        self.last_build = None   # t of the last list post (drives both the throttle and the heartbeat)
         self._said_empty = False
 
     # ------------------------------------------------------------------ classification
@@ -207,29 +210,43 @@ class Watchlist:
                 # chart the death: show the candles at the moment it turned
                 msgs.append({"text": self._cut_text(sym, cut, e.get("ca")), "sym": sym,
                              "addr": e.get("addr"), "chart": "dying"})
+                self._cut_recent[sym] = t   # keep it off the list for recut_s (no cut-then-relist)
                 self._drop(sym)
-        # 2) (re)build when: first run, refresh timer elapsed, or the list emptied — floored so an
-        #    all-dumping market can't spam. Empty results don't set last_build, so startup keeps
-        #    retrying (silently) until pods warm up to FLYING, then posts the first real list.
-        due = (self.last_build is None or (t - self.last_build) >= self.refresh_s or not self.order)
-        can = self.last_build is None or (t - self.last_build) >= self.min_rebuild_s
-        if due and can:
-            entries = sorted((self._entry(p) for p in pods if self._tradeable(p)),
-                             key=self._score, reverse=True)[:self.wl_max]
-            if entries:
-                for e in entries:
-                    e.update(added_t=t, list_price=e["price"], peak_price=e["price"], streak=0)
-                self.order = [e["symbol"] for e in entries]
+        # 2) rebuild the current tradeable set and REPOST when it would change vs what's on the
+        #    channel (a token rotated out / got cut / a new one qualified), or on the refresh
+        #    heartbeat. Throttled by min_rebuild_s so a churning fleet can't spam. This keeps the
+        #    posted list in sync with what the fleet is actually watching, not a 4h-old snapshot.
+        throttle_ok = self.last_build is None or (t - self.last_build) >= self.min_rebuild_s
+        if throttle_ok:
+            entries = sorted(
+                (self._entry(p) for p in pods
+                 if self._tradeable(p) and (t - self._cut_recent.get(p.symbol, -1e18)) >= self.recut_s),
+                key=self._score, reverse=True)[:self.wl_max]
+            new_syms = [e["symbol"] for e in entries]
+            changed = new_syms != self._posted_order
+            stale = self.last_build is None or (t - self.last_build) >= self.refresh_s
+            if entries and (changed or stale):
+                prev = self.listed
+                for e in entries:                     # preserve listing memory for already-listed tokens
+                    old = prev.get(e["symbol"])
+                    if old and "list_price" in old:
+                        e["added_t"], e["list_price"] = old["added_t"], old["list_price"]
+                        e["peak_price"], e["streak"] = old.get("peak_price", e["price"]), old.get("streak", 0)
+                    else:
+                        e.update(added_t=t, list_price=e["price"], peak_price=e["price"], streak=0)
+                self.order = new_syms
                 self.listed = {e["symbol"]: e for e in entries}
+                self._posted_order = list(new_syms)
                 self.last_build = t
                 self._said_empty = False
                 item = {"text": self._list_text(entries)}
                 if 1 <= len(entries) <= self.chart_list_max:
-                    # a short list gets a chart of the single/top pool
                     item.update(sym=entries[0]["symbol"], addr=entries[0]["addr"], chart="tradeable")
                 msgs.append(item)
-            elif not self._said_empty:
+            elif not entries and self._posted_order and not self._said_empty:
                 self._said_empty = True
+                self._posted_order = []
+                self.last_build = t
                 msgs.append({"text": self._empty_text()})
         return msgs
 
@@ -308,25 +325,30 @@ if __name__ == "__main__":
     # steady: nothing changed -> silence
     assert wl.update(pods, t=10) == []
 
-    # hard cut 1: pod halts (PERCHED) -> immediate, with a dying chart requested
+    # a pod ROTATES OUT of the fleet -> dropped AND the list reposts in sync (the staleness fix)
+    rot = wl.update([p for p in pods if p.symbol != "C-SOL"], t=15)
+    assert any("TRADEABLE NOW · 2 pools" in x for x in txt(rot)) and "C-SOL" not in wl.order, rot
+    pods = [pod("A-SOL", turn=5, vol=12, price=1.0), pod("B-SOL", turn=8, vol=6, price=2.0),
+            pod("C-SOL", turn=3, vol=20, price=0.01)]
+    wl.update(pods, t=16)   # C back -> reposts 3
+
+    # hard cut: pod halts (PERCHED) -> CUT (dying chart) AND the list reposts without it
     pods[0] = pod("A-SOL", rs="PERCHED")
     ma = wl.update(pods, t=20)
-    assert len(ma) == 1 and ma[0]["text"].startswith("☠️ CUT $A") and ma[0]["chart"] == "dying", ma
-    assert "A-SOL" not in wl.order
+    cut_a = [i for i in ma if i["text"].startswith("☠️ CUT $A")]
+    assert cut_a and cut_a[0]["chart"] == "dying", ma
+    assert any("TRADEABLE NOW" in x for x in txt(ma)) and "A-SOL" not in wl.order, ma
 
-    # hard cut 2: real price dump (-25% from listing 2.0 -> 1.5) -> immediate
+    # memory preserved across reposts: B was listed at 2.0; 1.5 = -25% -> CUT (not reset to 1.5)
     pods[1] = pod("B-SOL", price=1.5)
-    mb = wl.update(pods, t=30)
-    assert any(x.startswith("☠️ CUT $B") and "dumped -25%" in x for x in txt(mb)), mb
+    assert any(x.startswith("☠️ CUT $B") and "dumped -25%" in x for x in txt(wl.update(pods, t=30)))
 
     # soft signal needs persistence: high n once -> NO cut; twice -> cut
     pods[2] = pod("C-SOL", n=0.9, price=0.01)
-    ms1 = wl.update(pods, t=40)
-    assert not any("CUT $C" in x for x in txt(ms1)), ms1   # streak=1, held
-    ms2 = wl.update(pods, t=50)
-    assert any("CUT $C" in x for x in txt(ms2)), ms2       # streak=2 -> cut
+    assert not any("CUT $C" in x for x in txt(wl.update(pods, t=40))), "streak=1 should hold"
+    assert any("CUT $C" in x for x in txt(wl.update(pods, t=50))), "streak=2 -> cut"
 
-    # a single-pool list DOES carry a chart request
+    # a fresh single-pool list DOES carry a chart request
     solo = wl.update([pod("SOLO-SOL", turn=6, vol=15)], t=99999)
     assert solo and solo[-1].get("chart") == "tradeable" and solo[-1]["sym"] == "SOLO-SOL", solo
 
